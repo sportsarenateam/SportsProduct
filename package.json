@@ -1,0 +1,31 @@
+{
+  "name": "sports-arena-saas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@arena/web",
+    "dev:api": "npm run dev --workspace=@arena/api",
+    "dev:mobile": "npm run start --workspace=@arena/mobile",
+    "dev:mobile:web": "npm run start --workspace=@arena/mobile -- --web -c",
+    "build": "npm run build --workspace=@arena/web && npm run build --workspace=@arena/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  },
+  "description": "",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  }
+}
