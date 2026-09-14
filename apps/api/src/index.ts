@@ -101,6 +101,149 @@ async function findAuthUserByEmail(email: string) {
   return null;
 }
 
+/** Service-role provisioning — does not depend on RPC grants for private.provision_owner_arena. */
+async function provisionOwnerArena(input: {
+  actorId: string;
+  arenaName: string;
+  address?: string;
+  contactPhone?: string;
+  timezone?: string;
+  currencyCode?: string;
+}) {
+  const arenaName = input.arenaName.trim();
+  const timezone = (input.timezone?.trim() || "Asia/Kolkata");
+  const currencyCode = (input.currencyCode?.trim() || "INR").toUpperCase();
+  if (arenaName.length < 2 || arenaName.length > 120) throw new Error("Arena name must be between 2 and 120 characters");
+  if ((input.address?.length ?? 0) > 500 || (input.contactPhone?.length ?? 0) > 40) {
+    throw new Error("Arena contact details are too long");
+  }
+  if (!/^[A-Z]{3}$/.test(currencyCode)) throw new Error("Currency code must be a three-letter ISO code");
+
+  const { data: existingMembership } = await db.from("organization_memberships")
+    .select("organization_id")
+    .eq("user_id", input.actorId)
+    .eq("active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMembership?.organization_id) {
+    const [{ data: org }, { data: sub }] = await Promise.all([
+      db.from("organizations").select("id,name").eq("id", existingMembership.organization_id).maybeSingle(),
+      db.from("arena_subscriptions")
+        .select("status,trial_ends_at,current_period_ends_at")
+        .eq("organization_id", existingMembership.organization_id)
+        .maybeSingle(),
+    ]);
+    return {
+      organization: { id: existingMembership.organization_id, name: org?.name ?? arenaName },
+      subscription: {
+        status: sub?.status ?? "trialing",
+        trialEndsAt: sub?.trial_ends_at ?? null,
+        currentPeriodEndsAt: sub?.current_period_ends_at ?? null,
+      },
+      alreadyProvisioned: true,
+    };
+  }
+
+  const { data: organization, error: orgError } = await db.from("organizations").insert({
+    name: arenaName,
+    address: input.address?.trim() || null,
+    contact_phone: input.contactPhone?.trim() || null,
+    timezone,
+    currency_code: currencyCode,
+  }).select("id,name").single();
+  if (orgError || !organization) throw new Error(orgError?.message ?? "Unable to create arena");
+
+  const { error: memberError } = await db.from("organization_memberships").insert({
+    organization_id: organization.id,
+    user_id: input.actorId,
+    role: "owner",
+    active: true,
+  });
+  if (memberError) throw new Error(memberError.message);
+
+  const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: subscription, error: subError } = await db.from("arena_subscriptions").insert({
+    organization_id: organization.id,
+    status: "trialing",
+    trial_ends_at: trialEndsAt,
+  }).select("status,trial_ends_at,current_period_ends_at").single();
+  if (subError || !subscription) throw new Error(subError?.message ?? "Unable to start trial");
+
+  await db.from("activity_log").insert({
+    organization_id: organization.id,
+    actor_id: input.actorId,
+    action: "created",
+    entity_type: "organization",
+    entity_id: organization.id,
+    after_data: organization,
+  });
+
+  return {
+    organization: { id: organization.id, name: organization.name },
+    subscription: {
+      status: subscription.status,
+      trialEndsAt: subscription.trial_ends_at,
+      currentPeriodEndsAt: subscription.current_period_ends_at,
+    },
+    alreadyProvisioned: false,
+  };
+}
+
+const ONBOARDING_SPORTS = [
+  "Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Carrom", "Zumba Class", "Tennis",
+] as const;
+
+async function saveOwnerOnboardingSports(actorId: string, sportNames: string[]) {
+  const unique = [...new Set(sportNames)];
+  if (!unique.length) throw new Error("Select at least one sport");
+  for (const name of unique) {
+    if (!ONBOARDING_SPORTS.includes(name as typeof ONBOARDING_SPORTS[number])) {
+      throw new Error(`Unsupported sport: ${name}`);
+    }
+  }
+
+  const { data: membership } = await db.from("organization_memberships")
+    .select("organization_id")
+    .eq("user_id", actorId)
+    .eq("role", "owner")
+    .eq("active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!membership?.organization_id) throw new Error("Owner arena was not found");
+
+  const organizationId = membership.organization_id;
+
+  const { data: existingSports } = await db.from("sports")
+    .select("id,name,default_hourly_rate,active")
+    .eq("organization_id", organizationId);
+  const selected = new Set(unique);
+  for (const row of existingSports ?? []) {
+    if (!selected.has(row.name) && row.active) {
+      await db.from("sports").update({ active: false }).eq("id", row.id);
+    }
+  }
+
+  for (const name of unique) {
+    const existing = (existingSports ?? []).find((row) => row.name === name);
+    if (existing) {
+      await db.from("sports").update({ active: true }).eq("id", existing.id);
+    } else {
+      const { error } = await db.from("sports").insert({
+        organization_id: organizationId,
+        name,
+        default_hourly_rate: 0,
+        active: true,
+      });
+      if (error) throw new Error(error.message);
+    }
+  }
+
+  return unique;
+}
+
 /** Public: does this email already have an Auth account? */
 app.post("/auth/email-status", express.json(), async (req, res) => {
   try {
@@ -169,14 +312,16 @@ app.post("/auth/register", express.json(), async (req, res) => {
       full_name: input.arenaName,
     }, { onConflict: "id" });
 
-    const { data: provisioned, error: provisionError } = await db.rpc("provision_owner_arena", {
-      p_actor_id: created.user.id,
-      p_arena_name: input.arenaName,
-      p_address: "",
-      p_contact_phone: "",
-      p_timezone: "Asia/Kolkata",
-      p_currency_code: "INR",
-    });
+    const { data: provisioned, error: provisionError } = await (async () => {
+      try {
+        return { data: await provisionOwnerArena({
+          actorId: created.user.id,
+          arenaName: input.arenaName,
+        }), error: null as Error | null };
+      } catch (err) {
+        return { data: null, error: err instanceof Error ? err : new Error("Arena setup failed") };
+      }
+    })();
 
     if (provisionError || !provisioned) {
       // Do not leave a login-capable user without an arena.
@@ -245,30 +390,43 @@ app.get("/me/bootstrap", authenticate, async (req: AuthedRequest, res) => {
   });
 });
 app.post("/onboarding/arena", express.json(), authenticate, async (req: AuthedRequest, res) => {
-  const input = z.object({
-    arenaName: z.string().trim().min(2).max(120),
-    address: z.string().trim().max(500).optional().default(""),
-    contactPhone: z.string().trim().max(40).optional().default(""),
-    timezone: z.string().trim().min(1).max(64).default("Asia/Kolkata"),
-    currencyCode: z.string().trim().regex(/^[A-Za-z]{3}$/).default("INR"),
-  }).parse(req.body);
-  const { data, error } = await db.rpc("provision_owner_arena", {
-    p_actor_id: req.user!.id, p_arena_name: input.arenaName, p_address: input.address,
-    p_contact_phone: input.contactPhone, p_timezone: input.timezone,
-    p_currency_code: input.currencyCode.toUpperCase(),
-  });
-  if (error) return res.status(400).json({ error: error.message });
-  res.status(201).json(data);
+  try {
+    const input = z.object({
+      arenaName: z.string().trim().min(2).max(120),
+      address: z.string().trim().max(500).optional().default(""),
+      contactPhone: z.string().trim().max(40).optional().default(""),
+      timezone: z.string().trim().min(1).max(64).default("Asia/Kolkata"),
+      currencyCode: z.string().trim().regex(/^[A-Za-z]{3}$/).default("INR"),
+    }).parse(req.body);
+    const data = await provisionOwnerArena({
+      actorId: req.user!.id,
+      arenaName: input.arenaName,
+      address: input.address,
+      contactPhone: input.contactPhone,
+      timezone: input.timezone,
+      currencyCode: input.currencyCode.toUpperCase(),
+    });
+    res.status(201).json(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message ?? "Invalid arena details" });
+    }
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create arena" });
+  }
 });
 app.post("/onboarding/sports", express.json(), authenticate, async (req: AuthedRequest, res) => {
-  const input = z.object({
-    sports: z.array(z.enum(["Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Carrom", "Zumba Class", "Tennis"])).min(1).max(8),
-  }).parse(req.body);
-  const { data, error } = await db.rpc("save_owner_onboarding_sports", {
-    p_actor_id: req.user!.id, p_sport_names: [...new Set(input.sports)],
-  });
-  if (error) return res.status(400).json({ error: error.message });
-  res.status(201).json({ sports: data });
+  try {
+    const input = z.object({
+      sports: z.array(z.enum(["Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Carrom", "Zumba Class", "Tennis"])).min(1).max(8),
+    }).parse(req.body);
+    const sports = await saveOwnerOnboardingSports(req.user!.id, [...new Set(input.sports)]);
+    res.status(201).json({ sports });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message ?? "Invalid sports selection" });
+    }
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to save sports" });
+  }
 });
 app.get("/subscriptions/status", authenticate, membership, async (req: AuthedRequest, res) => {
   const { data, error } = await db.from("arena_subscriptions")

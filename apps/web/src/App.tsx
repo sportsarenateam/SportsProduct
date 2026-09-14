@@ -759,12 +759,31 @@ function AuthForm({
 }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [loginMethod, setLoginMethod] = useState<"otp" | "password">("otp");
+  const [loginMethod, setLoginMethod] = useState<"otp" | "password">(mode === "login" ? "password" : "otp");
   const [otpEmail, setOtpEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
+  const [passwordEmail, setPasswordEmail] = useState("");
 
   const authRedirectTo = `${window.location.origin}/auth/callback`;
+
+  async function lookupEmailStatus(email: string) {
+    const statusResponse = await fetch(`${apiUrl}/auth/email-status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const status = await statusResponse.json() as {
+      exists?: boolean;
+      hasPassword?: boolean;
+      hasArena?: boolean;
+      error?: string;
+    };
+    if (!statusResponse.ok) {
+      throw new Error(status.error ?? "Unable to check email");
+    }
+    return status;
+  }
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -776,19 +795,7 @@ function AuthForm({
     setMessage("");
     try {
       if (mode === "login") {
-        const statusResponse = await fetch(`${apiUrl}/auth/email-status`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        });
-        const status = await statusResponse.json() as {
-          exists?: boolean;
-          hasPassword?: boolean;
-          error?: string;
-        };
-        if (!statusResponse.ok) {
-          throw new Error(status.error ?? "Unable to check email");
-        }
+        const status = await lookupEmailStatus(email);
         if (!status.exists) {
           throw new Error("No account found for this email. Use Email OTP to get started.");
         }
@@ -816,13 +823,8 @@ function AuthForm({
         return;
       }
 
-      const statusResponse = await fetch(`${apiUrl}/auth/email-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const status = await statusResponse.json() as { exists?: boolean; error?: string };
-      if (statusResponse.ok && status.exists) {
+      const status = await lookupEmailStatus(email);
+      if (status.exists) {
         throw new Error("This email is already registered. Please log in instead.");
       }
 
@@ -877,18 +879,37 @@ function AuthForm({
     try {
       const email = otpEmail.trim().toLowerCase();
       if (!email) throw new Error("Enter your email");
+
+      const status = await lookupEmailStatus(email);
+      // Returning users with a password must use Password login — do not spam OTP.
+      if (mode === "login" && status.exists && status.hasPassword) {
+        setPasswordEmail(email);
+        setLoginMethod("password");
+        setOtpSent(false);
+        setMessage("This email is already registered. Sign in with your password.");
+        return;
+      }
+      if (mode === "signup" && status.exists) {
+        setPasswordEmail(email);
+        setLoginMethod("password");
+        setMessage("This email is already registered. Please log in with your password.");
+        return;
+      }
+
       sessionStorage.setItem("sportzarena-otp-email", email);
       const { error } = await supabase!.auth.signInWithOtp({
         email,
         options: {
-          // Production: OTP verifies email first. New users are created here; arena comes after OTP.
-          shouldCreateUser: true,
+          // Only create Auth users for brand-new emails.
+          shouldCreateUser: !status.exists,
           emailRedirectTo: authRedirectTo,
         },
       });
       if (error) throw new Error(error.message);
       setOtpSent(true);
-      setMessage("");
+      setMessage(status.exists && !status.hasPassword
+        ? "Account found without a password — enter the OTP, then set one."
+        : "");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to send OTP");
     } finally {
@@ -918,7 +939,7 @@ function AuthForm({
       if (userNeedsPasswordSetup(data.session?.user)) {
         navigate("/onboarding/password");
       } else {
-        navigate("/onboarding/arena");
+        navigate("/app");
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Invalid or expired OTP");
@@ -936,7 +957,7 @@ function AuthForm({
         <p>
           {mode === "login"
             ? (loginMethod === "otp"
-              ? (otpSent ? `Enter the code sent to ${otpEmail}` : "Enter your email for a one-time code.")
+              ? (otpSent ? `Enter the code sent to ${otpEmail}` : "New here? Enter your email for a one-time code. Returning users should use Password.")
               : "Sign in with the password you created after OTP.")
             : (loginMethod === "otp"
               ? (otpSent ? `Enter the code sent to ${otpEmail}` : "Verify your email with OTP, then set a password.")
@@ -999,9 +1020,17 @@ function AuthForm({
                   setMessage("");
                   setBusy(true);
                   try {
+                    const status = await lookupEmailStatus(otpEmail.trim().toLowerCase());
+                    if (status.exists && status.hasPassword) {
+                      setPasswordEmail(otpEmail.trim().toLowerCase());
+                      setLoginMethod("password");
+                      setOtpSent(false);
+                      setMessage("This email is already registered. Sign in with your password.");
+                      return;
+                    }
                     const { error } = await supabase!.auth.signInWithOtp({
                       email: otpEmail.trim().toLowerCase(),
-                      options: { shouldCreateUser: true, emailRedirectTo: authRedirectTo },
+                      options: { shouldCreateUser: !status.exists, emailRedirectTo: authRedirectTo },
                     });
                     if (error) throw new Error(error.message);
                     setMessage("New OTP sent. Use the latest email.");
@@ -1027,7 +1056,16 @@ function AuthForm({
                 <input name="arenaName" required minLength={2} maxLength={120} placeholder="e.g. GreenField Sports Arena" />
               </label>
             )}
-            <label>Email<input type="email" name="email" required autoComplete="email" /></label>
+            <label>Email
+              <input
+                type="email"
+                name="email"
+                required
+                autoComplete="email"
+                value={passwordEmail}
+                onChange={(e) => setPasswordEmail(e.target.value)}
+              />
+            </label>
             <PasswordInput
               label="Password"
               name="password"
