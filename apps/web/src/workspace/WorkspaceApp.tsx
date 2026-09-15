@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import sportzArenaLogo from "../assets/sportzarena-logo.png";
+import { ThemeToggle } from "../components/ThemeToggle";
 import type { AppRole, CartItem, InventoryItem, SportConfig, WorkspacePage } from "./types";
 import {
   bookingAmount as calcBookingAmount,
@@ -194,6 +195,7 @@ export function WorkspaceApp({
           </div>
         </div>
         <div className="workspace-nav-actions">
+          <ThemeToggle />
           {page !== "home" && canUseApp && <button className="link" onClick={() => setPage("home")}>← Dashboard</button>}
           {trialActive && !showUpgrade && (
             <button className="link" type="button" onClick={() => setShowUpgrade(true)}>Upgrade</button>

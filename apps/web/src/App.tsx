@@ -18,6 +18,7 @@ import tableTennisIcon from "./assets/table-tennis.png";
 import pickleballIcon from "./assets/pickleball.png";
 import { WorkspaceApp } from "./workspace/WorkspaceApp";
 import type { AppRole, WorkspacePage } from "./workspace/types";
+import { ThemeToggle } from "./components/ThemeToggle";
 
 type Arena = {
   id: string;
@@ -653,7 +654,8 @@ function Landing() {
     <main className="landing">
       <nav>
         <Brand />
-        <div>
+        <div className="landing-nav-actions">
+          <ThemeToggle />
           <button className="link" onClick={() => document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" })}>Pricing</button>
           <button className="link" onClick={() => navigate("/login")}>Log in</button>
           <button className="primary" onClick={() => navigate("/login")}>Start free</button>
@@ -933,6 +935,9 @@ function AuthForm({
 
   return (
     <main className="auth-page">
+      <div className="auth-theme-bar">
+        <ThemeToggle />
+      </div>
       <section className="auth-card auth-card-modern">
         <button className="back" onClick={() => navigate("/")}>← SportzArena</button>
         <img className="auth-brand" src={sportzArenaLogo} alt="" />
@@ -1132,6 +1137,7 @@ function AuthCallback() {
 
   return (
     <main className="auth-page">
+      <div className="auth-theme-bar"><ThemeToggle /></div>
       <section className="auth-card">
         <h1>Email login</h1>
         <p>{message}</p>
@@ -1165,6 +1171,7 @@ function SetPasswordOnboarding({ onDone }: { onDone: (session: Session) => void 
 
   return (
     <main className="auth-page">
+      <div className="auth-theme-bar"><ThemeToggle /></div>
       <section className="auth-card auth-card-modern">
         <img className="auth-brand" src={sportzArenaLogo} alt="" />
         <h1>Create your password</h1>
@@ -1248,6 +1255,7 @@ function ForgotPassword() {
 
   return (
     <main className="auth-page">
+      <div className="auth-theme-bar"><ThemeToggle /></div>
       <section className="auth-card auth-card-modern">
         <button className="back" onClick={() => navigate("/login")}>← Back to login</button>
         <h1>Reset password</h1>
@@ -1318,6 +1326,7 @@ function ResetPassword() {
 
   return (
     <main className="auth-page">
+      <div className="auth-theme-bar"><ThemeToggle /></div>
       <section className="auth-card auth-card-modern">
         <button className="back" onClick={() => navigate("/forgot-password")}>← Back</button>
         <h1>Choose a new password</h1>
@@ -1370,6 +1379,7 @@ function Onboarding({ session, onComplete }: { session: Session; onComplete: (ar
 
   return (
     <main className="auth-page">
+      <div className="auth-theme-bar"><ThemeToggle /></div>
       <section className="auth-card wide-card">
         <h1>Name your sports arena</h1>
         <p>Email verified. Tell us your arena name to start the 30-day free trial, then choose sports.</p>
@@ -1500,7 +1510,10 @@ function SportSelect({
     <main className="sport-select-shell">
       <nav>
         <Brand />
-        <button className="link" onClick={() => (onBack ? onBack() : navigate("/"))}>{backLabel}</button>
+        <div className="nav-right-actions">
+          <ThemeToggle />
+          <button className="link" onClick={() => (onBack ? onBack() : navigate("/"))}>{backLabel}</button>
+        </div>
       </nav>
       <section className="sport-select">
         <header className="sport-select-header anim-fade-up">
