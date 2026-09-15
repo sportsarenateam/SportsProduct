@@ -20,6 +20,7 @@ const SPORT_OPTIONS = [
   "Pickleball",
   "Table Tennis",
   "Carrom",
+  "Skating",
   "Zumba Class",
   "Tennis",
 ] as const;

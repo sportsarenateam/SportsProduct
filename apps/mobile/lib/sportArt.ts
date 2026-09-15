@@ -7,6 +7,8 @@ const art: Record<string, ImageSourcePropType> = {
   Football: require("../assets/football.png"),
   Pickleball: require("../assets/pickleball.png"),
   "Table Tennis": require("../assets/table-tennis.png"),
+  Carrom: require("../assets/carrom.png"),
+  Skating: require("../assets/skating.png"),
 };
 
 export function sportImage(name: string): ImageSourcePropType | null {

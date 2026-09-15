@@ -12,7 +12,7 @@ import {
   colors,
 } from "../components/ui";
 
-const SPORTS = ["Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis"] as const;
+const SPORTS = ["Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Skating"] as const;
 
 export function LandingScreen({
   onSignIn,

@@ -16,6 +16,8 @@ import footballIcon from "./assets/football.png";
 import badmintonIcon from "./assets/badminton.png";
 import tableTennisIcon from "./assets/table-tennis.png";
 import pickleballIcon from "./assets/pickleball.png";
+import carromIcon from "./assets/carrom.png";
+import skatingIcon from "./assets/skating.png";
 import { WorkspaceApp } from "./workspace/WorkspaceApp";
 import type { AppRole, WorkspacePage } from "./workspace/types";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -511,6 +513,8 @@ export function App() {
     Football: footballIcon,
     Pickleball: pickleballIcon,
     "Table Tennis": tableTennisIcon,
+    Carrom: carromIcon,
+    Skating: skatingIcon,
   };
 
   const workspacePage = pathToWorkspacePage(path);
@@ -648,6 +652,7 @@ function Landing() {
     { name: "Football", image: footballIcon },
     { name: "Pickleball", image: pickleballIcon },
     { name: "Table Tennis", image: tableTennisIcon },
+    { name: "Skating", image: skatingIcon },
   ];
 
   return (
@@ -696,7 +701,7 @@ function Landing() {
           ))}
           <article className="more-sports" data-reveal style={{ transitionDelay: `${activityIcons.length * 70}ms` }}>
             <strong>+</strong>
-            <b>Carrom, Tennis, Zumba & more</b>
+            <b>Carrom, Tennis, Zumba & skating</b>
           </article>
         </div>
       </section>
@@ -1453,7 +1458,8 @@ const sportOptions = [
   { name: "Football", image: footballIcon, tone: "football" },
   { name: "Pickleball", image: pickleballIcon, tone: "pickleball" },
   { name: "Table Tennis", image: tableTennisIcon, tone: "table-tennis" },
-  { name: "Carrom", position: "33.33% 100%", tone: "carrom" },
+  { name: "Carrom", image: carromIcon, tone: "carrom" },
+  { name: "Skating", image: skatingIcon, tone: "skating" },
   { name: "Zumba Class", position: "66.66% 100%", tone: "zumba" },
   { name: "Tennis", position: "100% 100%", tone: "tennis" },
 ] as const;
