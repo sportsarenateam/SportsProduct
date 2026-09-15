@@ -231,18 +231,16 @@ export function WorkspaceApp({
 
         {canUseApp && page === "home" && (
           <>
-            <div className="workspace-welcome">
+            <header className="workspace-welcome">
               <div className="workspace-welcome-top">
                 <div>
-                  <h1>Welcome, {arena.name}</h1>
+                  <p className="workspace-kicker">Dashboard</p>
+                  <h1>{arena.name}</h1>
                   <p>
                     {isOwner
-                      ? "Book courts, bill walk-ins, and keep coaching and sales in one place."
-                      : "Book courts, bill walk-ins, and keep coaching and membership running."}
+                      ? "Book courts, bill walk-ins, and manage coaching and sales."
+                      : "Book courts, bill walk-ins, and keep coaching running."}
                   </p>
-                </div>
-                <div className="workspace-avatar" aria-hidden="true">
-                  {(arena.name.trim()[0] || "A").toUpperCase()}
                 </div>
               </div>
               <div className="workspace-status-row">
@@ -265,13 +263,13 @@ export function WorkspaceApp({
                   <strong>₹499/mo</strong>
                 </div>
               </div>
-            </div>
+            </header>
 
             {trialActive && isOwner && (
               <div className="trial-banner">
                 <div>
                   <strong>{days > 0 ? `${days} days left on your free trial` : "Your free trial ends today"}</strong>
-                  <p>Keep bookings, invoices, coaching and sales running without interruption.</p>
+                  <p>Subscribe anytime to keep bookings and billing uninterrupted.</p>
                 </div>
                 <button type="button" className="primary" onClick={() => setShowUpgrade(true)}>
                   Choose a plan
