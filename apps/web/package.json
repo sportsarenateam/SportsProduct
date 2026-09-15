@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --experimental-strip-types --test src/workspace/*.test.ts"
@@ -13,16 +13,17 @@
   "dependencies": {
     "@arena/types": "0.1.0",
     "@supabase/supabase-js": "^2.47.10",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
-  },
-  "devDependencies": {
     "@types/react": "~19.1.10",
     "@types/react-dom": "~19.1.7",
     "@vitejs/plugin-react": "^4.3.4",
-    "tailwindcss": "latest",
-    "@tailwindcss/vite": "latest",
+    "@tailwindcss/vite": "^4.1.13",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "tailwindcss": "^4.1.13",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
+  },
+  "installConfig": {
+    "hoistingLimits": "workspaces"
   }
 }
