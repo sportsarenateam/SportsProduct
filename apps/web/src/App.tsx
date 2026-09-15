@@ -1504,9 +1504,9 @@ function SportSelect({
       </nav>
       <section className="sport-select">
         <header className="sport-select-header anim-fade-up">
-          <p className="eyebrow">CHOOSE YOUR GAME</p>
+          <p className="eyebrow">Setup</p>
           <h1>What sports do you run?</h1>
-          <p>Select every sport available at your arena. Only these will appear on your dashboard — you can add more later.</p>
+          <p>Pick every sport at your arena. Only these show on the dashboard — you can add more later.</p>
         </header>
         <div className="sport-tile-grid">
           {sportOptions.map((sport, index) => {
