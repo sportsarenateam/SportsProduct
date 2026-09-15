@@ -102,10 +102,18 @@ button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
 .brand-logo {
-  width: 148px;
-  height: 52px;
+  width: auto;
+  height: 56px;
+  max-width: 168px;
   object-fit: contain;
   object-position: left center;
+  display: block;
+}
+[data-theme="dark"] .brand-logo,
+[data-theme="dark"] .auth-brand {
+  background: #fff;
+  border-radius: 12px;
+  padding: 4px 8px;
 }
 
 .primary {
@@ -177,7 +185,7 @@ button { cursor: pointer; }
   color: var(--text);
 }
 .landing nav {
-  height: 76px;
+  height: 80px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -682,8 +690,10 @@ button { cursor: pointer; }
   min-height: min(82vh, 760px);
 }
 .auth-card-modern .auth-brand {
-  width: 120px;
-  height: auto;
+  width: auto;
+  height: 88px;
+  max-width: 220px;
+  object-fit: contain;
   margin: 4px 0 10px;
   display: block;
 }
@@ -860,8 +870,9 @@ button { cursor: pointer; }
   box-shadow: none;
 }
 .workspace-shell > nav .brand-logo {
-  width: 132px;
-  height: 44px;
+  width: auto;
+  height: 48px;
+  max-width: 148px;
 }
 .workspace-shell > nav .link { color: var(--link); }
 .workspace-shell > nav .link:hover { color: var(--link-hover); }
@@ -1742,7 +1753,7 @@ button { cursor: pointer; }
 }
 
 @media (max-width: 720px) {
-  .brand-logo { width: 120px; height: 48px; }
+  .brand-logo { width: auto; height: 44px; max-width: 132px; }
   .landing nav {
     height: auto;
     min-height: 64px;
@@ -1849,7 +1860,7 @@ button { cursor: pointer; }
 }
 
 @media (max-width: 390px) {
-  .brand-logo { width: 105px; }
+  .brand-logo { width: auto; height: 40px; max-width: 118px; }
   .landing nav .link:first-child { display: none; }
   .hero-copy h1 { font-size: 26px; }
   .landing-sports img { width: 62px; height: 62px; }
