@@ -616,7 +616,7 @@ function PlanCard({
       <p>{plan.detail}</p>
       <h2 className="plan-price">₹{animatedPrice}<small>/month</small></h2>
       <p className="billing-note">Billed monthly · Cancel anytime</p>
-      <ul>{plan.features.map((feature) => <li key={feature}>✓ {feature}</li>)}</ul>
+      <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
       <button type="button" className="primary" onClick={() => navigate("/login")}>
         Start 30-day free trial
       </button>
@@ -648,20 +648,15 @@ function Landing() {
     { name: "Pickleball", image: pickleballIcon },
     { name: "Table Tennis", image: tableTennisIcon },
   ];
-  const trust = [
-    { title: "Built for India", text: "UPI-ready checkout · ₹ pricing · local sports workflows" },
-    { title: "Secure access", text: "Email OTP via Resend + encrypted sessions" },
-    { title: "30 days free", text: "No card to start · Upgrade only when you are ready" },
-  ];
 
   return (
     <main className="landing">
       <nav>
         <Brand />
         <div>
-          <button className="link" onClick={() => document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" })}>Plans</button>
+          <button className="link" onClick={() => document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" })}>Pricing</button>
           <button className="link" onClick={() => navigate("/login")}>Log in</button>
-          <button className="primary" onClick={() => navigate("/login")}>Get started</button>
+          <button className="primary" onClick={() => navigate("/login")}>Start free</button>
         </div>
       </nav>
 
@@ -671,38 +666,25 @@ function Landing() {
         </div>
         <div className="hero-copy">
           <p className="brand-wordmark anim-fade-up" style={{ animationDelay: "60ms" }}>SportzArena</p>
-          <h1 className="anim-fade-up" style={{ animationDelay: "160ms" }}>Run your sports arena with clarity.</h1>
+          <h1 className="anim-fade-up" style={{ animationDelay: "160ms" }}>Bill. Manage. Grow.</h1>
           <p className="hero-lead anim-fade-up" style={{ animationDelay: "260ms" }}>
-            Bookings, invoices, coaching and sales — one workspace for Indian venues.
+            Court bookings, invoices, coaching and sales — one workspace built for Indian sports arenas.
           </p>
           <div className="hero-actions anim-fade-up" style={{ animationDelay: "360ms" }}>
             <button className="primary large cta-pulse" onClick={() => navigate("/login")}>
-              Start free trial <span className="cta-arrow">→</span>
+              Start 30-day free trial <span className="cta-arrow">→</span>
             </button>
             <button className="hero-link" onClick={() => document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" })}>
-              See monthly plan
+              See pricing
             </button>
           </div>
         </div>
       </section>
 
-      <section className="landing-section trust-strip">
-        <div className="trust-grid">
-          {trust.map((item, index) => (
-            <article key={item.title} data-reveal style={{ transitionDelay: `${index * 80}ms` }}>
-              <span className="trust-mark" aria-hidden="true">✓</span>
-              <div>
-                <b>{item.title}</b>
-                <p>{item.text}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
       <section className="landing-section">
-        <p className="eyebrow" data-reveal>ONE HOME FOR EVERY ACTIVITY</p>
-        <h2 data-reveal>From turf bookings to studio classes</h2>
+        <p className="eyebrow" data-reveal>Sports you already run</p>
+        <h2 data-reveal>Turf, courts, and classes in one place</h2>
+        <p className="section-lead" data-reveal>Switch sports without switching tools — rates, courts, and bills stay together.</p>
         <div className="landing-sports">
           {activityIcons.map((sport, index) => (
             <article key={sport.name} data-reveal style={{ transitionDelay: `${index * 70}ms` }}>
@@ -718,13 +700,14 @@ function Landing() {
       </section>
 
       <section className="landing-section" id="how-it-works">
-        <p className="eyebrow" data-reveal>HOW IT WORKS</p>
-        <h2 data-reveal>Start free. Pay only when your trial ends.</h2>
+        <p className="eyebrow" data-reveal>How it works</p>
+        <h2 data-reveal>Live in minutes. Pay after your trial.</h2>
+        <p className="section-lead" data-reveal>No card required to start. Keep working for 30 days, then continue with a simple monthly plan.</p>
         <div className="feature-grid">
           {[
-            { title: "1. Sign up", text: "Create your arena account and choose the sports you run — no card needed." },
-            { title: "2. Use for 30 days", text: "Bill bookings, coaching, memberships, beverages and invoices from one dashboard." },
-            { title: "3. Continue after payment", text: "When the trial ends, pay via Razorpay to keep your arena workspace active." },
+            { title: "1. Verify email", text: "OTP login, set your password, name your arena." },
+            { title: "2. Run daily ops", text: "Book courts, sell equipment, coach, and invoice from one dashboard." },
+            { title: "3. Subscribe when ready", text: "After the trial, pay securely to keep staff and billing online." },
           ].map((step, index) => (
             <article key={step.title} data-reveal style={{ transitionDelay: `${index * 100}ms` }}>
               <h2>{step.title}</h2>
@@ -735,9 +718,9 @@ function Landing() {
       </section>
 
       <section className="plans-section" id="plans">
-        <p className="eyebrow" data-reveal>SIMPLE MONTHLY PRICING</p>
-        <h2 data-reveal>One plan. Clear price. Full arena toolkit.</h2>
-        <p className="billing-summary" data-reveal>₹499 / month after your free trial · No yearly lock-in</p>
+        <p className="eyebrow" data-reveal>Pricing</p>
+        <h2 data-reveal>₹499 / month after free trial</h2>
+        <p className="billing-summary" data-reveal>One arena · Full toolkit · Cancel anytime</p>
         <div className="plan-grid plan-grid-single">
           {plans.map((plan, index) => (
             <PlanCard key={plan.name} plan={plan} index={index} />
