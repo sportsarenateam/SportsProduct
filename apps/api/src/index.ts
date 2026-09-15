@@ -192,7 +192,7 @@ async function provisionOwnerArena(input: {
 }
 
 const ONBOARDING_SPORTS = [
-  "Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Carrom", "Skating", "Zumba Class", "Tennis",
+  "Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Carrom", "Skating",
 ] as const;
 
 async function saveOwnerOnboardingSports(actorId: string, sportNames: string[]) {
@@ -417,7 +417,7 @@ app.post("/onboarding/arena", express.json(), authenticate, async (req: AuthedRe
 app.post("/onboarding/sports", express.json(), authenticate, async (req: AuthedRequest, res) => {
   try {
     const input = z.object({
-      sports: z.array(z.enum(["Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Carrom", "Skating", "Zumba Class", "Tennis"])).min(1).max(9),
+      sports: z.array(z.enum(["Cricket Turf", "Badminton", "Football", "Pickleball", "Table Tennis", "Carrom", "Skating"])).min(1).max(7),
     }).parse(req.body);
     const sports = await saveOwnerOnboardingSports(req.user!.id, [...new Set(input.sports)]);
     res.status(201).json({ sports });

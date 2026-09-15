@@ -8,7 +8,6 @@ import {
   readCachedSports,
   supabase,
 } from "./lib/supabase";
-import sportSprite from "./assets/arenaflow-sports-collection.png";
 import sportzArenaLogo from "./assets/sportzarena-logo.png";
 import sportzArenaBackground from "./assets/sportzarena-background.png";
 import cricketIcon from "./assets/cricket.png";
@@ -701,7 +700,7 @@ function Landing() {
           ))}
           <article className="more-sports" data-reveal style={{ transitionDelay: `${activityIcons.length * 70}ms` }}>
             <strong>+</strong>
-            <b>Carrom, Tennis, Zumba & skating</b>
+            <b>Carrom, skating & more</b>
           </article>
         </div>
       </section>
@@ -1460,21 +1459,10 @@ const sportOptions = [
   { name: "Table Tennis", image: tableTennisIcon, tone: "table-tennis" },
   { name: "Carrom", image: carromIcon, tone: "carrom" },
   { name: "Skating", image: skatingIcon, tone: "skating" },
-  { name: "Zumba Class", position: "66.66% 100%", tone: "zumba" },
-  { name: "Tennis", position: "100% 100%", tone: "tennis" },
 ] as const;
 
 function SportArtwork({ sport }: { sport: (typeof sportOptions)[number] }) {
-  if ("image" in sport && sport.image) {
-    return <img className="sport-tile-img" src={sport.image} alt="" />;
-  }
-  return (
-    <span
-      className="sport-art"
-      style={{ backgroundImage: `url(${sportSprite})`, backgroundPosition: "position" in sport ? sport.position : "0% 0%" }}
-      aria-hidden="true"
-    />
-  );
+  return <img className="sport-tile-img" src={sport.image} alt="" />;
 }
 
 function SportSelect({

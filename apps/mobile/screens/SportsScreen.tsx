@@ -21,8 +21,6 @@ const SPORT_OPTIONS = [
   "Table Tennis",
   "Carrom",
   "Skating",
-  "Zumba Class",
-  "Tennis",
 ] as const;
 
 export function SportsScreen({
