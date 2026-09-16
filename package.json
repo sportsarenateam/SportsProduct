@@ -12,9 +12,6 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
   },
-  "dependencies": {
-    "vite": "^6.0.7"
-  },
   "devDependencies": {
     "typescript": "^6.0.2"
   },

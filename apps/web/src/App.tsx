@@ -17,6 +17,7 @@ import tableTennisIcon from "./assets/table-tennis.png";
 import pickleballIcon from "./assets/pickleball.png";
 import carromIcon from "./assets/carrom.png";
 import skatingIcon from "./assets/skating.png";
+import volleyballIcon from "./assets/volleyball.png";
 import { WorkspaceApp } from "./workspace/WorkspaceApp";
 import type { AppRole, WorkspacePage } from "./workspace/types";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -514,6 +515,7 @@ export function App() {
     "Table Tennis": tableTennisIcon,
     Carrom: carromIcon,
     Skating: skatingIcon,
+    Volleyball: volleyballIcon,
   };
 
   const workspacePage = pathToWorkspacePage(path);
@@ -652,6 +654,7 @@ function Landing() {
     { name: "Pickleball", image: pickleballIcon },
     { name: "Table Tennis", image: tableTennisIcon },
     { name: "Skating", image: skatingIcon },
+    { name: "Volleyball", image: volleyballIcon },
   ];
 
   return (
@@ -1459,6 +1462,7 @@ const sportOptions = [
   { name: "Table Tennis", image: tableTennisIcon, tone: "table-tennis" },
   { name: "Carrom", image: carromIcon, tone: "carrom" },
   { name: "Skating", image: skatingIcon, tone: "skating" },
+  { name: "Volleyball", image: volleyballIcon, tone: "volleyball" },
 ] as const;
 
 function SportArtwork({ sport }: { sport: (typeof sportOptions)[number] }) {
