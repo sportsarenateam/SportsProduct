@@ -1,0 +1,9 @@
+{
+  "installCommand": "node ../web/scripts/run-vercel.mjs install",
+  "buildCommand": "node ../web/scripts/run-vercel.mjs build",
+  "outputDirectory": "../web/dist",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

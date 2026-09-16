@@ -1,7 +1,7 @@
 {
-  "installCommand": "npm install --prefix apps/web --workspaces=false --no-fund --no-audit",
-  "buildCommand": "npm run build --prefix apps/web",
-  "outputDirectory": "apps/web/dist",
+  "installCommand": "node ../web/scripts/run-vercel.mjs install || node ./apps/web/scripts/run-vercel.mjs install || node ./scripts/run-vercel.mjs install",
+  "buildCommand": "node ../web/scripts/run-vercel.mjs build || node ./apps/web/scripts/run-vercel.mjs build || node ./scripts/run-vercel.mjs build",
+  "outputDirectory": "../web/dist",
   "framework": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }

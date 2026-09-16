@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install --workspaces=false --no-fund --no-audit",
-  "buildCommand": "npm run build",
+  "installCommand": "node ./scripts/run-vercel.mjs install",
+  "buildCommand": "node ./scripts/run-vercel.mjs build",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
