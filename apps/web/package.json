@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node ./scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --experimental-strip-types --test src/workspace/*.test.ts"
@@ -22,8 +22,5 @@
     "tailwindcss": "^4.1.13",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
-  },
-  "installConfig": {
-    "hoistingLimits": "workspaces"
   }
 }

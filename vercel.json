@@ -1,5 +1,5 @@
 {
-  "installCommand": "NPM_CONFIG_PRODUCTION=false npm install --include=dev",
+  "installCommand": "npm install --no-fund --no-audit",
   "buildCommand": "npm run build --workspace=@arena/web",
   "outputDirectory": "apps/web/dist",
   "framework": "vite",
