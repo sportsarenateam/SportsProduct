@@ -40,12 +40,12 @@ Same for OTP: the 6-digit code is sent over HTTPS to `/auth/v1/verify`; Supabase
 - [ ] Publishable/anon key only in the web app; **service role never** in `VITE_*` or browser.
 - [ ] JWT expiry reasonable; owners can use Forgot password + OTP anytime.
 
-## Payments (Razorpay → PhonePe later)
+## Payments (Cashfree)
 
 - [x] Order created on **API** with secret key; amount not trusted from the client alone.
-- [x] Payment verified with **HMAC signature** (`/subscriptions/verify`) before setting `arena_subscriptions.status = active`.
-- [ ] Switch `.env` to live payment keys for production; remove test keys from prod hosts.
-- [ ] Set webhook secrets and verify signatures.
+- [x] Payment verified via Cashfree order status (`/subscriptions/verify`) before setting `arena_subscriptions.status = active`.
+- [ ] Switch `.env` to live Cashfree keys (`CASHFREE_ENV=production`) for production; remove test keys from prod hosts.
+- [ ] Set Cashfree webhook URL on Render: `https://<api-host>/webhooks/cashfree`.
 - [ ] Never log full card/UPI payloads; never store PAN/CVV (hosted checkout only).
 
 ## Data & API (SQL injection / abuse)

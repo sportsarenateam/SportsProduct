@@ -42,13 +42,13 @@ async function opsRequest<T>(session: Session, organizationId: string, path: str
   return body;
 }
 
-function loadRazorpay(): Promise<void> {
+function loadCashfree(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if ((window as any).Razorpay) return resolve();
+    if ((window as any).Cashfree) return resolve();
     const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Unable to load Razorpay"));
+    script.onerror = () => reject(new Error("Unable to load Cashfree"));
     document.body.appendChild(script);
   });
 }
@@ -392,71 +392,114 @@ function SubscriptionGate({
     setBusy(true);
     setError("");
     try {
-      await loadRazorpay();
+      await loadCashfree();
       const checkout = await opsRequest<{
         orderId: string;
+        paymentSessionId: string;
         amount: number;
         currency: string;
-        keyId: string;
         planName: string;
         mode?: "test" | "live";
+        env?: "sandbox" | "production";
       }>(session, arena.id, "/subscriptions/checkout", {
         method: "POST",
         body: JSON.stringify({ planId }),
       });
+      if (!checkout.orderId || !checkout.paymentSessionId) {
+        throw new Error("Checkout did not return a Cashfree order");
+      }
       if (checkout.mode) setPayMode(checkout.mode);
-      const RazorpayCheckout = (window as any).Razorpay;
-      const rzp = new RazorpayCheckout({
-        key: checkout.keyId,
-        amount: checkout.amount,
-        currency: checkout.currency,
-        order_id: checkout.orderId,
-        name: "SportzArena",
-        description: `${checkout.planName} · monthly subscription`,
-        prefill: {
-          name: arena.name,
-          email: session.user.email ?? undefined,
-        },
-        theme: { color: "#082b55" },
-        // Production: show all common Indian methods Razorpay has enabled on the account.
-        method: {
-          upi: true,
-          card: true,
-          netbanking: true,
-          wallet: true,
-        },
-        handler: async (response: {
-          razorpay_payment_id: string;
-          razorpay_order_id: string;
-          razorpay_signature: string;
-        }) => {
-          const verified = await opsRequest<{ status: string; periodEndsAt?: string }>(session, arena.id, "/subscriptions/verify", {
-            method: "POST",
-            body: JSON.stringify({
-              paymentId: response.razorpay_payment_id,
-              orderId: response.razorpay_order_id,
-              signature: response.razorpay_signature,
-            }),
-          });
-          onActivated({
-            status: verified.status ?? "active",
-          });
-          setBusy(false);
-        },
-        modal: {
-          ondismiss: () => setBusy(false),
-        },
+      // Keep order id for return-url recovery after Cashfree redirect.
+      try {
+        sessionStorage.setItem("sa_cf_order", checkout.orderId);
+        sessionStorage.setItem("sa_cf_arena", arena.id);
+      } catch {
+        /* ignore */
+      }
+      const CashfreeCheckout = (window as any).Cashfree;
+      const cashfree = CashfreeCheckout({
+        mode: checkout.env === "production" ? "production" : "sandbox",
       });
-      rzp.on("payment.failed", (response: { error?: { description?: string } }) => {
-        setError(response?.error?.description ?? "Payment failed. Try UPI, card, or netbanking.");
+      const result = await cashfree.checkout({
+        paymentSessionId: checkout.paymentSessionId,
+        redirectTarget: "_modal",
+      });
+      if (result?.error) {
+        setError(result.error.message || result.error || "Payment cancelled or failed");
         setBusy(false);
+        return;
+      }
+      if (result?.redirect) {
+        // Cashfree will navigate to return_url; recovery effect confirms payment.
+        setBusy(false);
+        return;
+      }
+
+      const verified = await opsRequest<{ status: string; periodEndsAt?: string }>(session, arena.id, "/subscriptions/verify", {
+        method: "POST",
+        body: JSON.stringify({ orderId: checkout.orderId }),
       });
-      rzp.open();
+      try {
+        sessionStorage.removeItem("sa_cf_order");
+        sessionStorage.removeItem("sa_cf_arena");
+      } catch {
+        /* ignore */
+      }
+      onActivated({
+        status: verified.status ?? "active",
+      });
+      setBusy(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start payment");
       setBusy(false);
     }
   }
+
+  // Recover after Cashfree return_url redirect (?cf_order=...).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("cf_order");
+    let fromStore: string | null = null;
+    let storedArena: string | null = null;
+    try {
+      fromStore = sessionStorage.getItem("sa_cf_order");
+      storedArena = sessionStorage.getItem("sa_cf_arena");
+    } catch {
+      /* ignore */
+    }
+    const orderId = fromQuery || fromStore;
+    if (!orderId) return;
+    if (storedArena && storedArena !== arena.id) return;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      setError("");
+      try {
+        const verified = await opsRequest<{ status: string }>(session, arena.id, "/subscriptions/verify", {
+          method: "POST",
+          body: JSON.stringify({ orderId }),
+        });
+        if (cancelled) return;
+        try {
+          sessionStorage.removeItem("sa_cf_order");
+          sessionStorage.removeItem("sa_cf_arena");
+        } catch {
+          /* ignore */
+        }
+        if (fromQuery) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("cf_order");
+          window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+        }
+        onActivated({ status: verified.status ?? "active" });
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to confirm payment");
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [session, arena.id, onActivated]);
 
   return (
     <div className="ops-panel subscription-gate">
@@ -486,7 +529,7 @@ function SubscriptionGate({
           {busy ? "Opening secure checkout…" : "Pay ₹499 securely"}
         </button>
         <p className="ops-muted">
-          Secured by Razorpay
+          Secured by Cashfree
           {payMode === "test" ? " · Test mode (no real charge)" : payMode === "live" ? " · Live payments" : ""}
           . After payment your arena unlocks immediately.
         </p>

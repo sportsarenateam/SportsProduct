@@ -40,5 +40,6 @@ Then walk modules **one by one** in the browser (recommended for today).
 - Sales rows stay in the database until you delete them — they do **not** reset next month.
 - Use the month filter (and Export/Share CSV) to review a period.
 
-## Deferred
-- [ ] Razorpay payment gateway (after feature testing)
+## Deferred / payments
+- [ ] Cashfree sandbox: Pay ₹499 on Subscribe → `arena_subscriptions.status` becomes `active`, period +30 days
+- [ ] Cashfree webhook on Render after deploy: `/webhooks/cashfree`

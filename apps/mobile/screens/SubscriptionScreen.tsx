@@ -18,11 +18,12 @@ import {
 
 type CheckoutPayload = {
   orderId: string;
+  paymentSessionId: string;
   amount: number;
   currency: string;
-  keyId: string;
   planName: string;
   mode?: "test" | "live";
+  env?: "sandbox" | "production";
 };
 
 export function SubscriptionScreen({
@@ -53,11 +54,7 @@ export function SubscriptionScreen({
         body: JSON.stringify({ planId: "basic" }),
       });
       if (checkout.mode) setPayMode(checkout.mode);
-      setCheckoutHtml(buildCheckoutHtml({
-        checkout,
-        arenaName: arena.name,
-        email: session.user.email ?? "",
-      }));
+      setCheckoutHtml(buildCheckoutHtml(checkout));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start payment");
       setBusy(false);
@@ -67,9 +64,7 @@ export function SubscriptionScreen({
   async function onWebMessage(raw: string) {
     let payload: {
       type: string;
-      paymentId?: string;
       orderId?: string;
-      signature?: string;
       description?: string;
     };
     try {
@@ -87,7 +82,7 @@ export function SubscriptionScreen({
       return;
     }
 
-    if (payload.type !== "success" || verifying.current) return;
+    if (payload.type !== "success" || verifying.current || !payload.orderId) return;
     verifying.current = true;
     try {
       const verified = await opsRequest<{ status: string; periodEndsAt?: string }>(
@@ -96,11 +91,7 @@ export function SubscriptionScreen({
         "/subscriptions/verify",
         {
           method: "POST",
-          body: JSON.stringify({
-            paymentId: payload.paymentId,
-            orderId: payload.orderId,
-            signature: payload.signature,
-          }),
+          body: JSON.stringify({ orderId: payload.orderId }),
         },
       );
       setCheckoutHtml(null);
@@ -118,11 +109,11 @@ export function SubscriptionScreen({
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <View style={{ padding: 16, paddingBottom: 8 }}>
-          <Muted>Opening Razorpay checkout…</Muted>
+          <Muted>Opening Cashfree checkout…</Muted>
         </View>
         <WebView
           originWhitelist={["*"]}
-          source={{ html: checkoutHtml, baseUrl: "https://checkout.razorpay.com" }}
+          source={{ html: checkoutHtml, baseUrl: "https://sdk.cashfree.com" }}
           javaScriptEnabled
           domStorageEnabled
           onMessage={(event) => onWebMessage(event.nativeEvent.data)}
@@ -155,7 +146,7 @@ export function SubscriptionScreen({
           onPress={startCheckout}
         />
         <Muted>
-          Secured by Razorpay
+          Secured by Cashfree
           {payMode === "test" ? " · Test mode (no real charge)" : payMode === "live" ? " · Live payments" : ""}
           . After payment your arena unlocks immediately.
         </Muted>
@@ -172,16 +163,9 @@ export function SubscriptionScreen({
   );
 }
 
-function buildCheckoutHtml({
-  checkout,
-  arenaName,
-  email,
-}: {
-  checkout: CheckoutPayload;
-  arenaName: string;
-  email: string;
-}) {
+function buildCheckoutHtml(checkout: CheckoutPayload) {
   const safe = (value: string) => value.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, " ");
+  const mode = checkout.env === "production" ? "production" : "sandbox";
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -190,8 +174,8 @@ function buildCheckoutHtml({
   <style>body{font-family:system-ui;padding:24px;color:#082b55;background:#f3f7fb}</style>
 </head>
 <body>
-  <p>Loading payment…</p>
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <p>Loading Cashfree payment…</p>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
   <script>
     (function () {
       function post(payload) {
@@ -199,39 +183,23 @@ function buildCheckoutHtml({
           window.ReactNativeWebView.postMessage(JSON.stringify(payload));
         }
       }
-      var options = {
-        key: '${safe(checkout.keyId)}',
-        amount: ${Number(checkout.amount)},
-        currency: '${safe(checkout.currency)}',
-        order_id: '${safe(checkout.orderId)}',
-        name: 'SportzArena',
-        description: '${safe(checkout.planName)} · monthly subscription',
-        prefill: {
-          name: '${safe(arenaName)}',
-          email: '${safe(email)}'
-        },
-        theme: { color: '#082b55' },
-        method: { upi: true, card: true, netbanking: true, wallet: true },
-        handler: function (response) {
-          post({
-            type: 'success',
-            paymentId: response.razorpay_payment_id,
-            orderId: response.razorpay_order_id,
-            signature: response.razorpay_signature
-          });
-        },
-        modal: {
-          ondismiss: function () { post({ type: 'dismiss' }); }
-        }
-      };
-      var rzp = new Razorpay(options);
-      rzp.on('payment.failed', function (response) {
-        post({
-          type: 'failed',
-          description: (response && response.error && response.error.description) || 'Payment failed'
+      try {
+        var cashfree = Cashfree({ mode: '${mode}' });
+        cashfree.checkout({
+          paymentSessionId: '${safe(checkout.paymentSessionId)}',
+          redirectTarget: '_self'
+        }).then(function (result) {
+          if (result && result.error) {
+            post({ type: 'failed', description: result.error.message || 'Payment failed' });
+            return;
+          }
+          post({ type: 'success', orderId: '${safe(checkout.orderId)}' });
+        }).catch(function (err) {
+          post({ type: 'failed', description: (err && err.message) || 'Payment failed' });
         });
-      });
-      rzp.open();
+      } catch (err) {
+        post({ type: 'failed', description: (err && err.message) || 'Unable to open Cashfree' });
+      }
     })();
   </script>
 </body>

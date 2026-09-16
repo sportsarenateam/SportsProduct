@@ -5,29 +5,44 @@ import dotenv from "dotenv";
 import ExcelJS from "exceljs";
 import express, { type NextFunction, type Request, type Response } from "express";
 import PDFDocument from "pdfkit";
-import Razorpay from "razorpay";
 import { createClient, type User } from "@supabase/supabase-js";
 import { z } from "zod";
+import {
+  cashfreeModeLabel,
+  createCashfreeOrder,
+  getCashfreeOrder,
+  getCashfreePayments,
+  type CashfreeEnv,
+} from "./cashfree.js";
 import { registerOpsRoutes } from "./opsRoutes.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
 const env = z.object({
   PORT: z.coerce.number().default(4000),
+  APP_URL: z.string().optional(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  RAZORPAY_KEY_ID: z.string().min(1),
-  RAZORPAY_KEY_SECRET: z.string().min(1),
-  RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
-  /** Optional override: "test" | "live". Defaults from key prefix (rzp_live_ → live). */
+  CASHFREE_APP_ID: z.string().min(1),
+  CASHFREE_SECRET_KEY: z.string().min(1),
+  CASHFREE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  /** Legacy Razorpay — optional while migrating subscription checkout to Cashfree. */
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   RAZORPAY_MODE: z.enum(["test", "live"]).optional(),
 }).parse(process.env);
 const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
-const razorpay = new Razorpay({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET });
-const razorpayMode: "test" | "live" = env.RAZORPAY_MODE
-  ?? (env.RAZORPAY_KEY_ID.startsWith("rzp_live_") ? "live" : "test");
+const cashfreeEnv: CashfreeEnv = env.CASHFREE_ENV;
+const cashfreeConfig = {
+  appId: env.CASHFREE_APP_ID,
+  secretKey: env.CASHFREE_SECRET_KEY,
+  env: cashfreeEnv,
+};
+const payMode = cashfreeModeLabel(cashfreeEnv);
 const app = express();
-const allowedOrigins = (process.env.APP_URL ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
+const allowedOrigins = (env.APP_URL ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
+const appOrigin = allowedOrigins[0] || "http://localhost:5173";
 app.use(cors({
   origin(origin, callback) {
     // Allow local web + LAN / tunnel mobile testing without throwing (throws crashed the API).
@@ -463,7 +478,8 @@ app.get("/subscriptions/plans", async (_req, res) => {
     .order("monthly_price");
   if (error) return res.status(400).json({ error: error.message });
   res.json({
-    mode: razorpayMode,
+    provider: "cashfree",
+    mode: payMode,
     plans: (data ?? []).map((plan) => ({
       id: plan.id,
       name: plan.name,
@@ -474,8 +490,8 @@ app.get("/subscriptions/plans", async (_req, res) => {
 
 app.get("/subscriptions/config", (_req, res) => {
   res.json({
-    mode: razorpayMode,
-    keyId: env.RAZORPAY_KEY_ID,
+    provider: "cashfree",
+    mode: payMode,
     currency: "INR",
     plan: { id: "basic", name: "Starter", monthlyPrice: 499 },
   });
@@ -491,42 +507,78 @@ app.post("/subscriptions/checkout", express.json(), authenticate, membership, re
       .single();
     if (!plan) return res.status(422).json({ error: "Subscription plan is unavailable" });
 
-    const amountPaise = Math.round(Number(plan.monthly_price) * 100);
-    if (!Number.isFinite(amountPaise) || amountPaise < 100) {
+    const amountRupees = Number(plan.monthly_price);
+    if (!Number.isFinite(amountRupees) || amountRupees < 1) {
       return res.status(422).json({ error: "Invalid plan price" });
     }
 
-    // One-time order checkout works with Razorpay test keys (no subscription plan IDs required).
-    const order = await razorpay.orders.create({
-      amount: amountPaise,
-      currency: "INR",
-      receipt: `sa_${String(req.organizationId).slice(0, 8)}_${Date.now()}`.slice(0, 40),
-      notes: {
+    const { data: org } = await db.from("organizations")
+      .select("contact_phone,name")
+      .eq("id", req.organizationId)
+      .maybeSingle();
+
+    const phoneDigits = String(org?.contact_phone ?? "").replace(/\D/g, "");
+    const customerPhone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : "9999999999";
+    const orderId = `sa_${String(req.organizationId).replace(/-/g, "").slice(0, 12)}_${Date.now()}`;
+    const returnUrl = `${appOrigin.replace(/\/$/, "")}/app?cf_order={order_id}`;
+
+    const order = await createCashfreeOrder(cashfreeConfig, {
+      orderId,
+      amount: amountRupees,
+      customerId: String(req.organizationId).replace(/-/g, "").slice(0, 50),
+      customerEmail: req.user?.email || "owner@sportzarena.app",
+      customerPhone,
+      returnUrl,
+      tags: {
         organization_id: String(req.organizationId),
         plan_id: plan.id,
         product: "SportzArena",
       },
     });
 
-    // Keep trial/active status — only attach the pending order id (do not wipe entitlement).
     const { data: existing } = await db.from("arena_subscriptions")
       .select("status,trial_ends_at")
       .eq("organization_id", req.organizationId)
       .maybeSingle();
-    await db.from("arena_subscriptions").upsert({
+
+    const baseRow = {
       organization_id: req.organizationId,
       plan_id: plan.id,
-      razorpay_order_id: order.id,
       status: existing?.status && existing.status !== "created" ? existing.status : "trialing",
       trial_ends_at: existing?.trial_ends_at ?? null,
-    }, { onConflict: "organization_id" });
+      updated_at: new Date().toISOString(),
+    };
+
+    // Cashfree only — never touch razorpay_order_id (may be dropped on this DB).
+    let upsertError = (await db.from("arena_subscriptions").upsert({
+      ...baseRow,
+      cashfree_order_id: order.order_id,
+    }, { onConflict: "organization_id" })).error;
+
+    if (upsertError && /cashfree_order_id/i.test(upsertError.message)) {
+      upsertError = (await db.from("arena_subscriptions").upsert({
+        ...baseRow,
+        razorpay_subscription_id: order.order_id,
+      }, { onConflict: "organization_id" })).error;
+    }
+    if (upsertError) {
+      console.error("subscription checkout upsert failed:", upsertError.message);
+      return res.status(500).json({
+        error: upsertError.message.includes("cashfree_order_id")
+          ? "Missing DB column cashfree_order_id. Run the Cashfree migration SQL in Supabase, then reload the API schema cache."
+          : `Unable to save payment order: ${upsertError.message}`,
+      });
+    }
 
     res.status(201).json({
-      orderId: order.id,
-      amount: amountPaise,
+      provider: "cashfree",
+      orderId: order.order_id,
+      paymentSessionId: order.payment_session_id,
+      amount: Math.round(amountRupees * 100),
+      amountRupees,
       currency: "INR",
-      keyId: env.RAZORPAY_KEY_ID,
-      mode: razorpayMode,
+      mode: payMode,
+      env: cashfreeEnv,
       planId: plan.id,
       planName: plan.name,
     });
@@ -538,45 +590,133 @@ app.post("/subscriptions/checkout", express.json(), authenticate, membership, re
 app.post("/subscriptions/verify", express.json(), authenticate, membership, requireRole("owner"), async (req: AuthedRequest, res) => {
   try {
     const input = z.object({
-      paymentId: z.string().min(1),
       orderId: z.string().min(1),
-      signature: z.string().min(1),
+      paymentId: z.string().optional(),
     }).parse(req.body);
 
-    const { data: record, error } = await db.from("arena_subscriptions")
-      .select("razorpay_order_id,plan_id")
+    const orgKey = String(req.organizationId ?? "").replace(/-/g, "");
+    const orderBelongsToArena = input.orderId.includes(orgKey.slice(0, 12));
+
+    let storedOrderId: string | null = null;
+    let orderColumn: "cashfree_order_id" | "razorpay_subscription_id" = "cashfree_order_id";
+
+    const primary = await db.from("arena_subscriptions")
+      .select("cashfree_order_id,razorpay_subscription_id,plan_id,status")
       .eq("organization_id", req.organizationId)
-      .eq("razorpay_order_id", input.orderId)
       .maybeSingle();
-    if (error || !record?.razorpay_order_id) {
-      return res.status(404).json({ error: "Payment order was not found for this arena" });
+
+    if (primary.error && /cashfree_order_id/i.test(primary.error.message)) {
+      const legacy = await db.from("arena_subscriptions")
+        .select("razorpay_subscription_id,plan_id,status")
+        .eq("organization_id", req.organizationId)
+        .maybeSingle();
+      if (legacy.error) return res.status(500).json({ error: legacy.error.message });
+      storedOrderId = legacy.data?.razorpay_subscription_id ?? null;
+      orderColumn = "razorpay_subscription_id";
+    } else if (primary.error) {
+      return res.status(500).json({ error: primary.error.message });
+    } else {
+      storedOrderId = primary.data?.cashfree_order_id ?? primary.data?.razorpay_subscription_id ?? null;
+      orderColumn = primary.data?.cashfree_order_id ? "cashfree_order_id" : "razorpay_subscription_id";
     }
 
-    const expected = crypto.createHmac("sha256", env.RAZORPAY_KEY_SECRET)
-      .update(`${input.orderId}|${input.paymentId}`)
-      .digest("hex");
-    const supplied = Buffer.from(input.signature);
-    const calculated = Buffer.from(expected);
-    if (supplied.length !== calculated.length || !crypto.timingSafeEqual(supplied, calculated)) {
-      return res.status(400).json({ error: "Invalid Razorpay payment signature" });
+    const orderMatches = storedOrderId === input.orderId || orderBelongsToArena;
+    if (!orderMatches) {
+      return res.status(404).json({
+        error: "Payment order was not found for this arena",
+        detail: storedOrderId ? "order_mismatch" : "order_missing",
+      });
+    }
+
+    const order = await getCashfreeOrder(cashfreeConfig, input.orderId);
+    const status = String(order.order_status || "").toUpperCase();
+    const paid = ["PAID", "SUCCESS"].includes(status);
+    if (!paid) {
+      const payments = await getCashfreePayments(cashfreeConfig, input.orderId).catch(() => []);
+      const paymentPaid = Array.isArray(payments) && payments.some((p) =>
+        ["SUCCESS", "PAID"].includes(String(p.payment_status || "").toUpperCase())
+      );
+      if (!paymentPaid) {
+        return res.status(400).json({
+          error: `Payment not completed yet (status: ${order.order_status || "UNKNOWN"})`,
+        });
+      }
     }
 
     const periodEnd = new Date();
     periodEnd.setDate(periodEnd.getDate() + 30);
-    await db.from("arena_subscriptions").update({
+    const patch: Record<string, string> = {
       status: "active",
       current_period_ends_at: periodEnd.toISOString(),
-    }).eq("organization_id", req.organizationId);
+      updated_at: new Date().toISOString(),
+      [orderColumn]: input.orderId,
+    };
 
-    res.status(200).json({ verified: true, status: "active", periodEndsAt: periodEnd.toISOString() });
+    let { error: activateError } = await db.from("arena_subscriptions")
+      .update(patch)
+      .eq("organization_id", req.organizationId);
+    if (activateError && /cashfree_order_id/i.test(activateError.message)) {
+      delete patch.cashfree_order_id;
+      patch.razorpay_subscription_id = input.orderId;
+      ({ error: activateError } = await db.from("arena_subscriptions")
+        .update(patch)
+        .eq("organization_id", req.organizationId));
+    }
+    if (activateError) {
+      return res.status(500).json({ error: activateError.message });
+    }
+
+    res.status(200).json({
+      verified: true,
+      status: "active",
+      periodEndsAt: periodEnd.toISOString(),
+      paymentId: input.paymentId ?? null,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message ?? "Invalid payload" });
     res.status(500).json({ error: error instanceof Error ? error.message : "Unable to verify payment" });
   }
 });
 
+app.post("/webhooks/cashfree", express.json({ type: "*/*" }), async (req, res) => {
+  try {
+    const payload = req.body as {
+      type?: string;
+      data?: {
+        order?: { order_id?: string; order_tags?: { organization_id?: string } };
+        payment?: { payment_status?: string };
+      };
+    };
+    const orderId = payload.data?.order?.order_id;
+    const paymentStatus = String(payload.data?.payment?.payment_status ?? "").toUpperCase();
+    const eventType = String(payload.type ?? "").toUpperCase();
+    const success = paymentStatus === "SUCCESS"
+      || eventType.includes("SUCCESS")
+      || eventType.includes("PAID");
+    if (!orderId || !success) return res.sendStatus(200);
+
+    const periodEnd = new Date();
+    periodEnd.setDate(periodEnd.getDate() + 30);
+    const orgFromTag = payload.data?.order?.order_tags?.organization_id;
+    let query = db.from("arena_subscriptions").update({
+      status: "active",
+      current_period_ends_at: periodEnd.toISOString(),
+    });
+    if (orgFromTag) query = query.eq("organization_id", orgFromTag);
+    else query = query.or(`cashfree_order_id.eq.${orderId},razorpay_subscription_id.eq.${orderId}`);
+    await query;
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Cashfree webhook error:", error);
+    res.sendStatus(500);
+  }
+});
+
 app.post("/webhooks/razorpay", express.raw({ type: "application/json" }), async (req, res) => {
-  const expected = crypto.createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET).update(req.body).digest("hex"); const received = Buffer.from(req.header("x-razorpay-signature") ?? ""); const signed = Buffer.from(expected);
+  if (!env.RAZORPAY_WEBHOOK_SECRET) return res.sendStatus(404);
+  const expected = crypto.createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET).update(req.body).digest("hex");
+  const received = Buffer.from(req.header("x-razorpay-signature") ?? "");
+  const signed = Buffer.from(expected);
   if (received.length !== signed.length || !crypto.timingSafeEqual(received, signed)) return res.sendStatus(400);
   const event = JSON.parse(req.body.toString()) as { payload: { subscription?: { entity?: { id: string; status: string; current_end: number } } } };
   const eventId = req.header("x-razorpay-event-id") ?? crypto.createHash("sha256").update(req.body).digest("hex");
@@ -588,4 +728,4 @@ app.post("/webhooks/razorpay", express.raw({ type: "application/json" }), async 
 });
 registerOpsRoutes(app, db, authenticate, membership, requireEntitlement);
 
-app.listen(Number(env.PORT), "0.0.0.0", () => console.log(`Arena API listening on 0.0.0.0:${env.PORT}`));
+app.listen(Number(env.PORT), "0.0.0.0", () => console.log(`Arena API listening on 0.0.0.0:${env.PORT} · payments=${payMode} (cashfree)`));
