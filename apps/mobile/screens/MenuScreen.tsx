@@ -194,20 +194,24 @@ export function MenuScreen({
               <Label>Price</Label>
               <Field
                 keyboardType="decimal-pad"
-                value={String(item.price)}
+                placeholder="—"
+                value={item.price === 0 ? "" : String(item.price)}
                 onChangeText={(v) => {
                   const next = [...localInv];
-                  next[index] = { ...item, price: Number(sanitizeAmountInput(v) || 0) };
+                  const cleaned = sanitizeAmountInput(v);
+                  next[index] = { ...item, price: cleaned === "" ? 0 : Number(cleaned) };
                   setLocalInv(next);
                 }}
               />
               <Label>Stock</Label>
               <Field
                 keyboardType="number-pad"
-                value={String(item.stock)}
+                placeholder="—"
+                value={item.stock === 0 ? "" : String(item.stock)}
                 onChangeText={(v) => {
                   const next = [...localInv];
-                  next[index] = { ...item, stock: Number(v.replace(/\D/g, "") || 0) };
+                  const digits = v.replace(/\D/g, "");
+                  next[index] = { ...item, stock: digits === "" ? 0 : Number(digits) };
                   setLocalInv(next);
                 }}
               />

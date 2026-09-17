@@ -36,7 +36,8 @@ export function MembershipScreen({
   const [entries, setEntries] = useState<any[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
-  const [timing, setTiming] = useState("1 Hour");
+  const [timeFrom, setTimeFrom] = useState("18:00");
+  const [timeTo, setTimeTo] = useState("19:00");
   const [selectedSports, setSelectedSports] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
@@ -44,6 +45,7 @@ export function MembershipScreen({
   const [error, setError] = useState("");
 
   const amountNum = parseAmount(amount);
+  const timingLabel = `${timeFrom} - ${timeTo}`;
 
   async function load() {
     const data = await opsRequest<{ entries: any[] }>(session, arenaId, "/ops/membership-billing");
@@ -61,13 +63,14 @@ export function MembershipScreen({
       if (!customerName.trim()) throw new Error("Customer name is required");
       if (!isValidMobile(customerMobile, true)) throw new Error("Enter a valid 10-digit mobile number");
       if (!Number.isFinite(amountNum) || amountNum <= 0) throw new Error("Enter an amount greater than 0");
+      if (!timeFrom.trim() || !timeTo.trim()) throw new Error("Select membership time from and to");
       await opsRequest(session, arenaId, "/ops/membership-billing", {
         method: "POST",
         body: JSON.stringify({
           customerName,
           customerMobile: mobileDigits(customerMobile),
           sportName: selectedSports.join(", "),
-          timing,
+          timing: timingLabel,
           bookingMethod: "WALK_IN",
           amount: amountNum,
           paymentMode,
@@ -78,6 +81,8 @@ export function MembershipScreen({
       setCustomerMobile("");
       setSelectedSports([]);
       setAmount("");
+      setTimeFrom("18:00");
+      setTimeTo("19:00");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save");
@@ -99,12 +104,21 @@ export function MembershipScreen({
           value={customerMobile}
           onChangeText={(v) => setCustomerMobile(sanitizeMobileInput(v))}
         />
-        <Label>Timings</Label>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {["1 Hour", "1.5 Hours", "2 Hours", "3 Hours", "4 Hours"].map((t) => (
-            <Chip key={t} label={t} active={timing === t} onPress={() => setTiming(t)} />
-          ))}
-        </View>
+        <Label>Time from (HH:MM)</Label>
+        <Field
+          value={timeFrom}
+          onChangeText={setTimeFrom}
+          placeholder="18:00"
+          autoCapitalize="none"
+        />
+        <Label>Time to (HH:MM)</Label>
+        <Field
+          value={timeTo}
+          onChangeText={setTimeTo}
+          placeholder="19:00"
+          autoCapitalize="none"
+        />
+        <Muted>Saved as {timingLabel}</Muted>
         <Label>Amount</Label>
         <Field keyboardType="decimal-pad" value={amount} onChangeText={(v) => setAmount(sanitizeAmountInput(v))} />
         <Label>Payment</Label>

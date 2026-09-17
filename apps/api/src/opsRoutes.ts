@@ -159,7 +159,7 @@ export function registerOpsRoutes(
     const { data, error } = await db.from("pos_transactions")
       .select("*, pos_transaction_items(*), pos_transaction_courts(*)")
       .eq("organization_id", req.organizationId!)
-      .order("created_at", { ascending: false })
+      .order("bill_number", { ascending: false })
       .limit(300);
     if (error) return res.status(400).json({ error: error.message });
     res.json({ transactions: data ?? [] });
@@ -564,7 +564,7 @@ export function registerOpsRoutes(
     const { data, error } = await db.from("generated_invoices")
       .select("id,bill_number,customer_name,customer_mobile,grand_total,payload,created_at")
       .eq("organization_id", req.organizationId!)
-      .order("created_at", { ascending: false })
+      .order("bill_number", { ascending: false })
       .limit(200);
     if (error) return res.status(400).json({ error: error.message });
     res.json({ invoices: data ?? [] });

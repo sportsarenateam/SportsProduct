@@ -1314,6 +1314,29 @@ button { cursor: pointer; }
   color: var(--text);
   line-height: 1.25;
 }
+.sales-pay-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px 14px;
+  text-align: right;
+  max-width: min(100%, 420px);
+}
+.sales-pay-stats span {
+  width: 100%;
+  color: #64748b;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sales-pay-stats strong {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
 .ops-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1951,6 +1974,8 @@ button { cursor: pointer; }
   border-color: var(--border);
 }
 [data-theme="dark"] .sales-dashboard strong { color: var(--text); }
+[data-theme="dark"] .sales-pay-stats span { color: var(--text-muted); }
+[data-theme="dark"] .sales-pay-stats strong { color: var(--text); }
 [data-theme="dark"] .workspace-sport-title b { color: var(--text); }
 [data-theme="dark"] .workspace-sport-title span {
   background: #1e3a5f;

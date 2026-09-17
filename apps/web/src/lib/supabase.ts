@@ -24,6 +24,7 @@ export function cacheArena(userId: string, arena: {
   id: string;
   name: string;
   trial_ends_at: string | null;
+  current_period_ends_at?: string | null;
   status: string;
   address?: string;
   pincode?: string;
@@ -39,7 +40,16 @@ export function cacheArena(userId: string, arena: {
 export function readCachedArena(userId: string) {
   try {
     const raw = localStorage.getItem(`${ARENA_CACHE_KEY}:${userId}`);
-    return raw ? JSON.parse(raw) as { id: string; name: string; trial_ends_at: string | null; status: string } : null;
+    return raw ? JSON.parse(raw) as {
+      id: string;
+      name: string;
+      trial_ends_at: string | null;
+      current_period_ends_at?: string | null;
+      status: string;
+      address?: string;
+      pincode?: string;
+      contactPhone?: string;
+    } : null;
   } catch {
     return null;
   }

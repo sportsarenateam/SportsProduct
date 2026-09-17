@@ -4,6 +4,8 @@ export type Arena = {
   id: string;
   name: string;
   trial_ends_at: string | null;
+  /** Paid plan renew date from DB (UTC ISO). */
+  current_period_ends_at?: string | null;
   status: string;
   address?: string;
   pincode?: string;

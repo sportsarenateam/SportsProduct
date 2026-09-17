@@ -5,6 +5,7 @@ import { opsRequest } from "../lib/api";
 import { sportImage } from "../lib/sportArt";
 import {
   bookingAmount as calcBookingAmount,
+  byBillDesc,
   cartItemsTotal,
   grandTotal as calcGrandTotal,
   isValidMobile,
@@ -162,15 +163,16 @@ export function BookingScreen({
       || row.customer_name?.toLowerCase().includes(q)
       || String(row.bill_number).includes(q);
     return inMonth && match;
-  });
+  }).slice().sort(byBillDesc);
   const itemSalesTotal = filteredItemBills.reduce((sum, row) => sum + Number(row.grand_total || 0), 0);
   const itemSalesDiscount = filteredItemBills.reduce((sum, row) => sum + Number(row.discount || 0), 0);
+  const itemSalesAdvance = filteredItemBills.reduce((sum, row) => sum + Number(row.advance || 0), 0);
 
   async function exportItemCsv() {
     const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const headers = ["Bill", "Created", "Customer", "Discount", "Total", "Payment"];
+    const headers = ["Bill", "Created", "Customer", "Discount", "Advance", "Total", "Payment"];
     const dataRows = filteredItemBills.map((row) => [
-      row.bill_number, row.created_at, row.customer_name, row.discount || 0, row.grand_total, row.payment_mode,
+      row.bill_number, row.created_at, row.customer_name, row.discount || 0, row.advance || 0, row.grand_total, row.payment_mode,
     ]);
     const csv = [headers, ...dataRows].map((line) => line.map(escape).join(",")).join("\n");
     await Share.share({ message: csv, title: `beverages-equipment-${itemMonth || "all"}.csv` });
@@ -289,7 +291,7 @@ export function BookingScreen({
           <Label>Beverages & Equipment sales</Label>
           <Muted>Month filter + Share CSV — same idea as Sales Report.</Muted>
           <Text style={{ color: colors.navy, fontWeight: "800", marginTop: 8 }}>
-            ₹{itemSalesTotal.toFixed(0)} · {filteredItemBills.length} bills · disc ₹{itemSalesDiscount.toFixed(0)}
+            ₹{itemSalesTotal.toFixed(0)} · {filteredItemBills.length} bills · disc ₹{itemSalesDiscount.toFixed(0)} · adv ₹{itemSalesAdvance.toFixed(0)}
           </Text>
           <Label>Month (YYYY-MM)</Label>
           <Field placeholder="2026-08" value={itemMonth} onChangeText={setItemMonth} autoCapitalize="none" />
@@ -307,6 +309,7 @@ export function BookingScreen({
               <Muted>
                 ₹{Number(row.grand_total || 0).toFixed(0)} · {row.payment_mode}
                 {Number(row.discount || 0) > 0 ? ` · disc ₹${Number(row.discount).toFixed(0)}` : ""}
+                {Number(row.advance || 0) > 0 ? ` · adv ₹${Number(row.advance).toFixed(0)}` : ""}
               </Muted>
               <Pressable onPress={() => {
                 Alert.alert("Delete?", "Delete this bill?", [

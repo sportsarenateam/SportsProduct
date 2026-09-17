@@ -95,7 +95,10 @@ export function SubscriptionScreen({
         },
       );
       setCheckoutHtml(null);
-      onActivated({ status: verified.status ?? "active" });
+      onActivated({
+        status: verified.status ?? "active",
+        current_period_ends_at: verified.periodEndsAt ?? null,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Payment verify failed");
       setCheckoutHtml(null);
@@ -127,21 +130,31 @@ export function SubscriptionScreen({
     <Screen>
       {onDismiss ? <BackHeader title="Subscribe" onBack={onDismiss} /> : null}
       <Card>
-        <Muted>{upgradingDuringTrial ? "Upgrade anytime" : "Trial ended"}</Muted>
+        <Muted>
+          {upgradingDuringTrial
+            ? (["active", "authenticated"].includes(arena.status) ? "Renew anytime" : "Upgrade anytime")
+            : "Subscription required"}
+        </Muted>
         <Title>
           {upgradingDuringTrial
-            ? "Unlock SportzArena for your arena"
+            ? (["active", "authenticated"].includes(arena.status)
+              ? "Renew SportzArena for your arena"
+              : "Unlock SportzArena for your arena")
             : "Subscribe to keep your arena open"}
         </Title>
         <Muted>
           {upgradingDuringTrial
             ? `${arena.name} stays fully online after payment — bookings, invoices, coaching and sales in one place.`
-            : `Your free trial for ${arena.name} has ended. Pay ₹499/month to restore access for your staff and customers.`}
+            : `Access for ${arena.name} is paused. Pay ₹499/month to restore bookings and billing for your staff.`}
         </Muted>
         <Muted>Starter · ₹499/mo · UPI, card, or netbanking</Muted>
         <ErrorText>{error}</ErrorText>
         <PrimaryButton
-          label={busy ? "Opening secure checkout…" : "Pay ₹499 securely"}
+          label={busy ? "Opening secure checkout…" : (
+            ["active", "authenticated"].includes(arena.status) && upgradingDuringTrial
+              ? "Renew ₹499 securely"
+              : "Pay ₹499 securely"
+          )}
           busy={busy}
           onPress={startCheckout}
         />
@@ -151,7 +164,14 @@ export function SubscriptionScreen({
           . After payment your arena unlocks immediately.
         </Muted>
         {onDismiss ? (
-          <LinkButton label="Not now — keep using trial →" onPress={onDismiss} />
+          <LinkButton
+            label={
+              ["active", "authenticated"].includes(arena.status)
+                ? "Not now — keep using plan →"
+                : "Not now — keep using trial →"
+            }
+            onPress={onDismiss}
+          />
         ) : null}
         {!onDismiss ? (
           <View style={{ marginTop: 8 }}>

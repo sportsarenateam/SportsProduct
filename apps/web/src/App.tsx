@@ -26,6 +26,7 @@ type Arena = {
   id: string;
   name: string;
   trial_ends_at: string | null;
+  current_period_ends_at?: string | null;
   status: string;
   address?: string;
   pincode?: string;
@@ -252,8 +253,9 @@ export function App() {
         address?: string | null;
         pincode?: string | null;
         contact_phone?: string | null;
-        arena_subscriptions?: { trial_ends_at: string | null; status: string } | Array<{
+        arena_subscriptions?: { trial_ends_at: string | null; current_period_ends_at?: string | null; status: string } | Array<{
           trial_ends_at: string | null;
+          current_period_ends_at?: string | null;
           status: string;
         }>;
       } | Array<{
@@ -262,8 +264,9 @@ export function App() {
         address?: string | null;
         pincode?: string | null;
         contact_phone?: string | null;
-        arena_subscriptions?: { trial_ends_at: string | null; status: string } | Array<{
+        arena_subscriptions?: { trial_ends_at: string | null; current_period_ends_at?: string | null; status: string } | Array<{
           trial_ends_at: string | null;
+          current_period_ends_at?: string | null;
           status: string;
         }>;
       }> | null }>;
@@ -283,6 +286,7 @@ export function App() {
             id: organization.id,
             name: organization.name,
             trial_ends_at: subscription?.trial_ends_at ?? null,
+            current_period_ends_at: subscription?.current_period_ends_at ?? null,
             status: rawStatus === "created" ? "trialing" : rawStatus,
             address: organization.address ?? "",
             pincode: organization.pincode ?? "",

@@ -174,7 +174,7 @@ export function CoachingScreen({
         {entries.slice(0, 20).map((entry) => (
           <View key={entry.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }}>
             <Text style={{ fontWeight: "700" }}>{entry.child_name} · #{entry.bill_number ?? "—"}</Text>
-            <Muted>{entry.parent_name} · ₹{Number(entry.amount).toFixed(0)}</Muted>
+            <Muted>{entry.parent_name} · paid ₹{Math.max(0, Number(entry.amount || 0) - Number(entry.discount || 0) - Number(entry.advance || 0)).toFixed(0)}{Number(entry.advance || 0) > 0 ? ` · adv ₹${Number(entry.advance).toFixed(0)}` : ""}{Number(entry.discount || 0) > 0 ? ` · disc ₹${Number(entry.discount).toFixed(0)}` : ""}</Muted>
           </View>
         ))}
       </Card>

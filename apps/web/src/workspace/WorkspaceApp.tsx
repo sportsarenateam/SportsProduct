@@ -19,11 +19,75 @@ type Arena = {
   id: string;
   name: string;
   trial_ends_at: string | null;
+  current_period_ends_at?: string | null;
   status: string;
   address?: string;
   pincode?: string;
   contactPhone?: string;
 };
+
+function daysUntil(iso: string | null | undefined) {
+  if (!iso) return null;
+  return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
+}
+
+function formatPlanDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Nav / dashboard label so owners know when to renew. */
+function planRenewLabel(arena: Arena) {
+  const status = arena.status === "created" ? "trialing" : arena.status;
+  if (status === "trialing" && arena.trial_ends_at) {
+    const days = daysUntil(arena.trial_ends_at) ?? 0;
+    return days > 0 ? `Trial · ${days}d left · renew before ${formatPlanDate(arena.trial_ends_at)}` : "Trial ended — renew now";
+  }
+  if (["active", "authenticated"].includes(status)) {
+    if (arena.current_period_ends_at) {
+      const days = daysUntil(arena.current_period_ends_at) ?? 0;
+      if (days <= 0) return "Plan expired — renew now";
+      if (days <= 7) return `Renew in ${days}d · ends ${formatPlanDate(arena.current_period_ends_at)}`;
+      return `Plan active · renews ${formatPlanDate(arena.current_period_ends_at)}`;
+    }
+    return "Subscription active";
+  }
+  return "Subscription required";
+}
+
+function byBillDesc(a: { bill_number?: number | null }, b: { bill_number?: number | null }) {
+  return Number(b.bill_number || 0) - Number(a.bill_number || 0);
+}
+
+function downloadExcelWorkbook(
+  filename: string,
+  sheets: Array<{ name: string; headers: string[]; rows: unknown[][] }>,
+) {
+  const esc = (value: unknown) => String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const body = sheets.map((sheet) => {
+    const safeName = sheet.name.replace(/[\\/*?:\[\]]/g, " ").slice(0, 31) || "Sheet";
+    const header = `<Row>${sheet.headers.map((h) => `<Cell><Data ss:Type="String">${esc(h)}</Data></Cell>`).join("")}</Row>`;
+    const rows = sheet.rows.map((row) => `<Row>${row.map((cell) => {
+      const isNum = typeof cell === "number" && Number.isFinite(cell);
+      return `<Cell><Data ss:Type="${isNum ? "Number" : "String"}">${esc(cell)}</Data></Cell>`;
+    }).join("")}</Row>`).join("");
+    return `<Worksheet ss:Name="${esc(safeName)}"><Table>${header}${rows}</Table></Worksheet>`;
+  }).join("");
+  const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+${body}
+</Workbook>`;
+  const blob = new Blob([xml], { type: "application/vnd.ms-excel" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filename}.xls`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
@@ -126,9 +190,11 @@ export function WorkspaceApp({
   const trialActive = entitled && (arena.status === "trialing" || arena.status === "created");
   const showPaywall = !entitled || showUpgrade;
   const canUseApp = entitled && !showUpgrade;
-  const days = arena.trial_ends_at
-    ? Math.max(0, Math.ceil((new Date(arena.trial_ends_at).getTime() - Date.now()) / 86_400_000))
-    : 0;
+  const days = daysUntil(arena.trial_ends_at) ?? 0;
+  const planDaysLeft = ["active", "authenticated"].includes(arena.status)
+    ? daysUntil(arena.current_period_ends_at)
+    : null;
+  const renewSoon = planDaysLeft !== null && planDaysLeft <= 7;
 
   useEffect(() => {
     if (!message) return;
@@ -185,20 +251,16 @@ export function WorkspaceApp({
           <img className="brand-logo" src={sportzArenaLogo} alt="SportzArena" />
           <div className="workspace-arena-meta">
             <strong>{arena.name}</strong>
-            <span>
-              {arena.status === "trialing"
-                ? (days > 0 ? `${days} days trial left` : "Trial ended")
-                : ["active", "authenticated"].includes(arena.status)
-                  ? "Subscription active"
-                  : "Subscription required"}
-            </span>
+            <span>{planRenewLabel(arena)}</span>
           </div>
         </div>
         <div className="workspace-nav-actions">
           <ThemeToggle />
           {page !== "home" && canUseApp && <button className="link" onClick={() => setPage("home")}>← Dashboard</button>}
-          {trialActive && !showUpgrade && (
-            <button className="link" type="button" onClick={() => setShowUpgrade(true)}>Upgrade</button>
+          {((trialActive && !showUpgrade) || (renewSoon && isOwner && !trialActive)) && (
+            <button className="link" type="button" onClick={() => setShowUpgrade(true)}>
+              {renewSoon && !trialActive ? "Renew" : "Upgrade"}
+            </button>
           )}
           <button className="link" onClick={onAddSports}>Add sports</button>
           <button className="link" onClick={onLogout}>Log out</button>
@@ -262,10 +324,36 @@ export function WorkspaceApp({
                 </div>
                 <div className="workspace-status-chip">
                   <span>Plan</span>
-                  <strong>₹499/mo</strong>
+                  <strong>
+                    {arena.current_period_ends_at
+                      ? `Till ${formatPlanDate(arena.current_period_ends_at)}`
+                      : trialActive
+                        ? (days > 0 ? `${days}d trial` : "Trial end")
+                        : "₹499/mo"}
+                  </strong>
                 </div>
               </div>
             </header>
+
+            {renewSoon && isOwner && !trialActive && (
+              <div className="trial-banner">
+                <div>
+                  <strong>
+                    {planDaysLeft === 0
+                      ? "Your plan ended — renew to stay online"
+                      : `Plan renews in ${planDaysLeft} day${planDaysLeft === 1 ? "" : "s"}`}
+                  </strong>
+                  <p>
+                    {arena.current_period_ends_at
+                      ? `Renew before ${formatPlanDate(arena.current_period_ends_at)} to avoid interruption.`
+                      : "Renew your SportzArena plan to keep access."}
+                  </p>
+                </div>
+                <button type="button" className="primary" onClick={() => setShowUpgrade(true)}>
+                  Renew plan
+                </button>
+              </div>
+            )}
 
             {trialActive && isOwner && (
               <div className="trial-banner">
@@ -451,6 +539,7 @@ function SubscriptionGate({
       }
       onActivated({
         status: verified.status ?? "active",
+        current_period_ends_at: verified.periodEndsAt ?? null,
       });
       setBusy(false);
     } catch (err) {
@@ -479,7 +568,7 @@ function SubscriptionGate({
       setBusy(true);
       setError("");
       try {
-        const verified = await opsRequest<{ status: string }>(session, arena.id, "/subscriptions/verify", {
+        const verified = await opsRequest<{ status: string; periodEndsAt?: string }>(session, arena.id, "/subscriptions/verify", {
           method: "POST",
           body: JSON.stringify({ orderId }),
         });
@@ -495,7 +584,10 @@ function SubscriptionGate({
           url.searchParams.delete("cf_order");
           window.history.replaceState({}, "", url.pathname + url.search + url.hash);
         }
-        onActivated({ status: verified.status ?? "active" });
+        onActivated({
+          status: verified.status ?? "active",
+          current_period_ends_at: verified.periodEndsAt ?? null,
+        });
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unable to confirm payment");
       } finally {
@@ -673,9 +765,10 @@ function BookingPanel({
       || String(row.bill_number).includes(q)
       || row.customer_mobile?.includes(q);
     return inMonth && match;
-  });
+  }).slice().sort((a, b) => Number(a.bill_number || 0) - Number(b.bill_number || 0));
   const itemSalesTotal = filteredItemBills.reduce((sum, row) => sum + Number(row.grand_total || 0), 0);
   const itemSalesDiscount = filteredItemBills.reduce((sum, row) => sum + Number(row.discount || 0), 0);
+  const itemSalesAdvance = filteredItemBills.reduce((sum, row) => sum + Number(row.advance || 0), 0);
 
   function exportItemCsv() {
     const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
@@ -804,7 +897,12 @@ function BookingPanel({
             </>
           )}
         </div>
-        <p className="ops-muted">Subtotal ₹{(bookingAmt + itemsTotal).toFixed(0)} − discount/advance = ₹{grand.toFixed(0)}</p>
+        <p className="ops-muted">
+          Booking ₹{bookingAmt.toFixed(0)} + Items ₹{itemsTotal.toFixed(0)}
+          {" "}− Discount ₹{discountNum.toFixed(0)}
+          {" "}− Advance ₹{advanceNum.toFixed(0)}
+          {" "}= <strong>Bill ₹{grand.toFixed(0)}</strong>
+        </p>
         {error && <p className="workspace-notice">{error}</p>}
         <button className="primary large" disabled={busy}>{busy ? "Saving…" : `Save bill ₹${grand.toFixed(0)}`}</button>
       </section>
@@ -832,6 +930,10 @@ function BookingPanel({
             <span>Discount given</span>
             <strong>₹{itemSalesDiscount.toFixed(0)}</strong>
           </article>
+          <article>
+            <span>Advance collected</span>
+            <strong>₹{itemSalesAdvance.toFixed(0)}</strong>
+          </article>
         </div>
         <div className="ops-inline" style={{ gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
           <label>
@@ -849,16 +951,17 @@ function BookingPanel({
         />
         <div className="ops-table-wrap">
           <table>
-            <thead><tr><th>Bill</th><th>Customer</th><th>Discount</th><th>Mode</th><th>Total</th><th></th></tr></thead>
+            <thead><tr><th>Bill</th><th>Customer</th><th>Discount</th><th>Advance</th><th>Mode</th><th>Total</th><th></th></tr></thead>
             <tbody>
               {filteredItemBills.length === 0 && (
-                <tr><td colSpan={6} className="ops-muted">No item bills for this period.</td></tr>
+                <tr><td colSpan={7} className="ops-muted">No item bills for this period.</td></tr>
               )}
               {filteredItemBills.map((row) => (
                 <tr key={row.id}>
                   <td>#{row.bill_number}</td>
                   <td>{row.customer_name}</td>
                   <td>₹{Number(row.discount || 0).toFixed(0)}</td>
+                  <td>₹{Number(row.advance || 0).toFixed(0)}</td>
                   <td>{row.payment_mode}</td>
                   <td>₹{Number(row.grand_total).toFixed(0)}</td>
                   <td>
@@ -932,9 +1035,9 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       opsRequest<{ entries: any[] }>(session, arenaId, "/ops/coaching"),
       opsRequest<{ entries: any[] }>(session, arenaId, "/ops/membership-billing"),
     ]);
-    setRows(tx.transactions);
-    setCoaching(coach.entries);
-    setMembership(member.entries);
+    setRows(tx.transactions ?? []);
+    setCoaching(coach.entries ?? []);
+    setMembership(member.entries ?? []);
   }
 
   useEffect(() => {
@@ -951,6 +1054,12 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
     return !String(row.sport_name ?? "").trim();
   }
 
+  function hasSoldItems(row: any) {
+    if (Number(row.items_total || 0) > 0) return true;
+    const lines = row.pos_transaction_items;
+    return Array.isArray(lines) && lines.length > 0;
+  }
+
   const q = query.trim().toLowerCase();
   const monthRows = rows.filter((row) => inSelectedMonth(row.created_at));
   const filteredBookings = monthRows.filter((row) =>
@@ -962,16 +1071,17 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       || String(row.bill_number).includes(q)
       || row.customer_mobile?.includes(q)
     ),
-  );
+  ).slice().sort(byBillDesc);
   const filteredItems = monthRows.filter((row) =>
-    isItemsOnly(row)
+    hasSoldItems(row)
     && (
       !q
       || row.customer_name?.toLowerCase().includes(q)
+      || row.sport_name?.toLowerCase().includes(q)
       || String(row.bill_number).includes(q)
       || row.customer_mobile?.includes(q)
     ),
-  );
+  ).slice().sort(byBillDesc);
   const filteredCoaching = coaching.filter((row) =>
     inSelectedMonth(row.created_at)
     && (
@@ -981,7 +1091,7 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       || row.mobile_number?.includes(q)
       || String(row.bill_number ?? "").includes(q)
     ),
-  );
+  ).slice().sort(byBillDesc);
   const filteredMembership = membership.filter((row) =>
     inSelectedMonth(row.created_at)
     && (
@@ -992,25 +1102,59 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       || row.customer_mobile?.includes(q)
       || row.timing?.toLowerCase().includes(q)
     ),
-  );
+  ).slice().sort(byBillDesc);
 
-  const bookingTotal = filteredBookings.reduce((sum, row) => sum + Number(row.grand_total || 0), 0);
-  const bookingDiscount = filteredBookings.reduce((sum, row) => sum + Number(row.discount || 0), 0);
-  const itemsTotal = filteredItems.reduce((sum, row) => sum + Number(row.grand_total || 0), 0);
-  const itemsDiscount = filteredItems.reduce((sum, row) => sum + Number(row.discount || 0), 0);
-  const coachingTotal = filteredCoaching.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  function bookingNet(row: any) {
+    const bookingAmt = Number(row.booking_amount || 0);
+    const itemsAmt = Number(row.items_total || 0);
+    const disc = Number(row.discount || 0);
+    const adv = Number(row.advance || 0);
+    const sub = bookingAmt + itemsAmt;
+    if (sub <= 0) return Math.max(0, Number(row.grand_total || 0));
+    const share = bookingAmt / sub;
+    return Math.max(0, bookingAmt - disc * share - adv * share);
+  }
+  const bookingTotal = filteredBookings.reduce((sum, row) => sum + bookingNet(row), 0);
+  const itemsTotal = filteredItems.reduce((sum, row) => sum + Number(row.items_total || 0), 0);
+  const coachingPaid = (row: any) => Math.max(0, Number(row.amount || 0) - Number(row.discount || 0) - Number(row.advance || 0));
+  const coachingTotal = filteredCoaching.reduce((sum, row) => sum + coachingPaid(row), 0);
   const coachingDiscount = filteredCoaching.reduce((sum, row) => sum + Number(row.discount || 0), 0);
+  const coachingAdvance = filteredCoaching.reduce((sum, row) => sum + Number(row.advance || 0), 0);
   const membershipTotal = filteredMembership.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-  const periodDiscount = bookingDiscount + itemsDiscount + coachingDiscount;
-  const tabTotal =
-    tab === "BOOKINGS" ? bookingTotal
-    : tab === "ITEMS" ? itemsTotal
-    : tab === "COACHING" ? coachingTotal
-    : membershipTotal;
+  const periodDiscount =
+    monthRows.reduce((sum, row) => sum + Number(row.discount || 0), 0) + coachingDiscount;
+  const periodAdvance =
+    monthRows.reduce((sum, row) => sum + Number(row.advance || 0), 0) + coachingAdvance;
+
+  function modeAmount(mode: string, amount: number) {
+    const key = String(mode || "").toUpperCase();
+    if (key === "CASH") return { cash: amount, online: 0, split: 0 };
+    if (key === "ONLINE") return { cash: 0, online: amount, split: 0 };
+    if (key === "SPLIT") return { cash: 0, online: 0, split: amount };
+    return { cash: 0, online: 0, split: 0 };
+  }
+  const paymentStats = (() => {
+    let cash = 0;
+    let online = 0;
+    let split = 0;
+    for (const row of monthRows) {
+      const part = modeAmount(row.payment_mode, Number(row.grand_total || 0));
+      cash += part.cash; online += part.online; split += part.split;
+    }
+    for (const row of filteredCoaching) {
+      const part = modeAmount(row.payment_mode, coachingPaid(row));
+      cash += part.cash; online += part.online; split += part.split;
+    }
+    for (const row of filteredMembership) {
+      const part = modeAmount(row.payment_mode, Number(row.amount || 0));
+      cash += part.cash; online += part.online; split += part.split;
+    }
+    return { cash, online, split };
+  })();
 
   const sportSlices = Object.entries(filteredBookings.reduce<Record<string, number>>((acc, row) => {
     const key = row.sport_name?.trim() || "Sport";
-    acc[key] = (acc[key] ?? 0) + Number(row.grand_total || 0);
+    acc[key] = (acc[key] ?? 0) + bookingNet(row);
     return acc;
   }, {})).map(([label, value], index) => ({
     label,
@@ -1019,9 +1163,9 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
   }));
   const moduleSlices = [
     { label: "Bookings", value: bookingTotal, color: "#082b55" },
-    { label: "Items", value: itemsTotal, color: "#d97706" },
-    { label: "Coaching", value: coachingTotal, color: "#0d9488" },
     { label: "Membership", value: membershipTotal, color: "#e11d48" },
+    { label: "Coaching", value: coachingTotal, color: "#0d9488" },
+    { label: "Beverages & Equipment", value: itemsTotal, color: "#d97706" },
   ];
 
   async function removeBooking(id: string) {
@@ -1040,56 +1184,42 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
     await load();
   }
 
-  function exportCsv() {
-    const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-    let headers: string[];
-    let dataRows: unknown[][];
-    if (tab === "BOOKINGS" || tab === "ITEMS") {
-      const source = tab === "ITEMS" ? filteredItems : filteredBookings;
-      headers = ["Bill", "Created", "Customer", "Mobile", "Sport", "Discount", "Advance", "GrandTotal", "Payment"];
-      dataRows = source.map((row) => [
-        row.bill_number,
-        row.created_at,
-        row.customer_name,
-        row.customer_mobile,
-        row.sport_name || "Beverages & Equipment",
-        row.discount ?? 0,
-        row.advance ?? 0,
-        row.grand_total,
-        row.payment_mode,
-      ]);
-    } else if (tab === "COACHING") {
-      headers = ["Bill", "Created", "Child", "Parent", "Mobile", "Discount", "Amount", "Payment"];
-      dataRows = filteredCoaching.map((row) => [
-        row.bill_number,
-        row.created_at,
-        row.child_name,
-        row.parent_name,
-        row.mobile_number,
-        row.discount ?? 0,
-        row.amount,
-        row.payment_mode,
-      ]);
-    } else {
-      headers = ["Bill", "Created", "Customer", "Mobile", "Sport", "Timing", "Amount"];
-      dataRows = filteredMembership.map((row) => [
-        row.bill_number,
-        row.created_at,
-        row.customer_name,
-        row.customer_mobile,
-        row.sport_name,
-        row.timing,
-        row.amount,
-      ]);
-    }
-    const csv = [headers, ...dataRows].map((line) => line.map(escape).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `sales-${tab.toLowerCase()}-${month || "all"}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  function exportExcel() {
+    downloadExcelWorkbook(`sales-report-${month || "all"}`, [
+      {
+        name: "Bookings",
+        headers: ["Bill", "Created", "Customer", "Mobile", "Sport", "Discount", "Advance", "GrandTotal", "Payment"],
+        rows: filteredBookings.map((row) => [
+          row.bill_number, row.created_at, row.customer_name, row.customer_mobile,
+          row.sport_name || "", row.discount ?? 0, row.advance ?? 0, Number(row.grand_total || 0), row.payment_mode,
+        ]),
+      },
+      {
+        name: "Membership",
+        headers: ["Bill", "Created", "Customer", "Mobile", "Sport", "Time", "Amount", "Payment"],
+        rows: filteredMembership.map((row) => [
+          row.bill_number, row.created_at, row.customer_name, row.customer_mobile,
+          row.sport_name, row.timing, Number(row.amount || 0), row.payment_mode,
+        ]),
+      },
+      {
+        name: "Coaching",
+        headers: ["Bill", "Created", "Child", "Parent", "Mobile", "Discount", "Advance", "Paid", "Payment"],
+        rows: filteredCoaching.map((row) => [
+          row.bill_number, row.created_at, row.child_name, row.parent_name, row.mobile_number,
+          row.discount ?? 0, row.advance ?? 0, coachingPaid(row), row.payment_mode,
+        ]),
+      },
+      {
+        name: "Items",
+        headers: ["Bill", "Created", "Customer", "Mobile", "Source", "ItemsTotal", "Discount", "Advance", "GrandTotal", "Payment"],
+        rows: filteredItems.map((row) => [
+          row.bill_number, row.created_at, row.customer_name, row.customer_mobile,
+          isItemsOnly(row) ? "Beverages & Equipment" : `With ${row.sport_name || "sport"}`,
+          Number(row.items_total || 0), row.discount ?? 0, row.advance ?? 0, Number(row.grand_total || 0), row.payment_mode,
+        ]),
+      },
+    ]);
   }
 
   return (
@@ -1098,9 +1228,13 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
         <div>
           <button type="button" className="link" onClick={onBack}>← Back</button>
           <h2>Sales Report</h2>
-          <p className="ops-muted">Sales stay in the database forever — they do not reset next month. Filter by month to review periods.</p>
         </div>
-        <strong>{tab}: ₹{tabTotal.toFixed(0)}</strong>
+        <div className="sales-pay-stats" title="Payment mode totals for the selected period">
+          <span>Statistics</span>
+          <strong>Cash ₹{paymentStats.cash.toFixed(0)}</strong>
+          <strong>Online ₹{paymentStats.online.toFixed(0)}</strong>
+          <strong>Split ₹{paymentStats.split.toFixed(0)}</strong>
+        </div>
       </header>
 
       <div className="sales-dashboard">
@@ -1110,14 +1244,14 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
           <small>{filteredBookings.length} bills</small>
         </article>
         <article>
-          <span>Beverages & Equipment</span>
-          <strong>₹{itemsTotal.toFixed(0)}</strong>
-          <small>{filteredItems.length} bills</small>
+          <span>Advance collected</span>
+          <strong>₹{periodAdvance.toFixed(0)}</strong>
+          <small>{month || "All time"}</small>
         </article>
         <article>
-          <span>Coaching</span>
-          <strong>₹{coachingTotal.toFixed(0)}</strong>
-          <small>{filteredCoaching.length} entries</small>
+          <span>Discount given</span>
+          <strong>₹{periodDiscount.toFixed(0)}</strong>
+          <small>{month || "All time"}</small>
         </article>
         <article>
           <span>Membership</span>
@@ -1125,9 +1259,14 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
           <small>{filteredMembership.length} entries</small>
         </article>
         <article>
-          <span>Discount given</span>
-          <strong>₹{periodDiscount.toFixed(0)}</strong>
-          <small>{month || "All time"}</small>
+          <span>Coaching</span>
+          <strong>₹{coachingTotal.toFixed(0)}</strong>
+          <small>{filteredCoaching.length} entries</small>
+        </article>
+        <article>
+          <span>Beverages & Equipment</span>
+          <strong>₹{itemsTotal.toFixed(0)}</strong>
+          <small>{filteredItems.length} bills</small>
         </article>
       </div>
 
@@ -1145,11 +1284,13 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       <div className="ops-tabs">
         {([
           ["BOOKINGS", "BOOKINGS"],
-          ["ITEMS", "ITEMS"],
-          ["COACHING", "COACHING"],
           ["MEMBERSHIP", "MEMBERSHIP"],
+          ["COACHING", "COACHING"],
+          ["ITEMS", "ITEMS"],
         ] as const).map(([id, label]) => (
-          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>
+          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+            {id === "ITEMS" ? "BEVERAGES & EQUIPMENT" : label}
+          </button>
         ))}
       </div>
       <div className="ops-inline" style={{ gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
@@ -1158,7 +1299,7 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
         </label>
         <button type="button" className="link" onClick={() => setMonth("")}>All months</button>
-        <button type="button" className="primary" onClick={exportCsv}>Export CSV</button>
+        <button type="button" className="primary" onClick={exportExcel}>Export Excel</button>
       </div>
       <input
         className="ops-search"
@@ -1173,8 +1314,9 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
               <tr>
                 <th>Bill</th>
                 <th>Customer</th>
-                <th>{tab === "ITEMS" ? "Type" : "Sport"}</th>
+                <th>{tab === "ITEMS" ? "Source" : "Sport"}</th>
                 <th>Discount</th>
+                <th>Advance</th>
                 <th>Mode</th>
                 <th>Total</th>
                 <th></th>
@@ -1185,10 +1327,23 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
                 <tr key={row.id}>
                   <td>#{row.bill_number}</td>
                   <td>{row.customer_name}</td>
-                  <td>{tab === "ITEMS" ? "Beverages & Equipment" : (row.sport_name || "—")}</td>
+                  <td>
+                    {tab === "ITEMS"
+                      ? (isItemsOnly(row)
+                        ? "Beverages & Equipment"
+                        : `With ${row.sport_name || "sport"}`)
+                      : (row.sport_name || "—")}
+                  </td>
                   <td>₹{Number(row.discount || 0).toFixed(0)}</td>
+                  <td>₹{Number(row.advance || 0).toFixed(0)}</td>
                   <td>{row.payment_mode}</td>
-                  <td>₹{Number(row.grand_total).toFixed(0)}</td>
+                  <td>
+                    ₹{Number(
+                      tab === "ITEMS"
+                        ? (row.items_total ?? 0)
+                        : row.grand_total,
+                    ).toFixed(0)}
+                  </td>
                   <td><button type="button" className="link" onClick={() => removeBooking(row.id)}>Delete</button></td>
                 </tr>
               ))}
@@ -1199,7 +1354,7 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       {tab === "COACHING" && (
         <div className="ops-table-wrap">
           <table>
-            <thead><tr><th>Bill</th><th>Child</th><th>Parent</th><th>Dates</th><th>Discount</th><th>Paid</th><th></th></tr></thead>
+            <thead><tr><th>Bill</th><th>Child</th><th>Parent</th><th>Dates</th><th>Discount</th><th>Advance</th><th>Paid</th><th></th></tr></thead>
             <tbody>
               {filteredCoaching.map((row) => (
                 <tr key={row.id}>
@@ -1208,7 +1363,8 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
                   <td>{row.parent_name}</td>
                   <td>{row.start_date || "—"} → {row.end_date || "—"}</td>
                   <td>₹{Number(row.discount || 0).toFixed(0)}</td>
-                  <td>₹{Number(row.amount).toFixed(0)}</td>
+                  <td>₹{Number(row.advance || 0).toFixed(0)}</td>
+                  <td>₹{coachingPaid(row).toFixed(0)}</td>
                   <td><button type="button" className="link" onClick={() => removeCoaching(row.id)}>Delete</button></td>
                 </tr>
               ))}
@@ -1219,14 +1375,14 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       {tab === "MEMBERSHIP" && (
         <div className="ops-table-wrap">
           <table>
-            <thead><tr><th>Bill</th><th>Customer</th><th>Sports</th><th>Timing</th><th>Amount</th><th></th></tr></thead>
+            <thead><tr><th>Bill</th><th>Customer</th><th>Sports</th><th>Time</th><th>Amount</th><th></th></tr></thead>
             <tbody>
               {filteredMembership.map((row) => (
                 <tr key={row.id}>
                   <td>#{row.bill_number}</td>
                   <td>{row.customer_name}</td>
                   <td>{row.sport_name || "—"}</td>
-                  <td>{row.timing}</td>
+                  <td>{row.timing || "—"}</td>
                   <td>₹{Number(row.amount).toFixed(0)}</td>
                   <td><button type="button" className="link" onClick={() => removeMembership(row.id)}>Delete</button></td>
                 </tr>
@@ -1340,20 +1496,27 @@ function CoachingPanel({ session, arenaId, onBack }: { session: Session; arenaId
             </select>
           </label>
         </div>
+        <p className="ops-muted">
+          Bill total after discount/advance: ₹{Math.max(0, Number(form.amount || 0) - Number(form.discount || 0) - Number(form.advance || 0)).toFixed(0)}
+        </p>
         {error && <p className="workspace-notice">{error}</p>}
-        <button className="primary" disabled={busy}>{busy ? "Saving…" : "Register coaching"}</button>
+        <button className="primary" disabled={busy}>
+          {busy ? "Saving…" : `Register coaching · ₹${Math.max(0, Number(form.amount || 0) - Number(form.discount || 0) - Number(form.advance || 0)).toFixed(0)}`}
+        </button>
       </form>
       <div className="ops-table-wrap">
         <table>
-          <thead><tr><th>Bill</th><th>Child</th><th>Parent</th><th>Dates</th><th>Amount</th><th></th></tr></thead>
+          <thead><tr><th>Bill</th><th>Child</th><th>Parent</th><th>Dates</th><th>Discount</th><th>Advance</th><th>Paid</th><th></th></tr></thead>
           <tbody>
-            {entries.map((entry) => (
+            {[...entries].sort((a, b) => Number(b.bill_number || 0) - Number(a.bill_number || 0)).map((entry) => (
               <tr key={entry.id}>
                 <td>#{entry.bill_number ?? "—"}</td>
                 <td>{entry.child_name}</td>
                 <td>{entry.parent_name}</td>
                 <td>{entry.start_date || "—"} → {entry.end_date || "—"}</td>
-                <td>₹{Number(entry.amount).toFixed(0)}</td>
+                <td>₹{Number(entry.discount || 0).toFixed(0)}</td>
+                <td>₹{Number(entry.advance || 0).toFixed(0)}</td>
+                <td>₹{Math.max(0, Number(entry.amount || 0) - Number(entry.discount || 0) - Number(entry.advance || 0)).toFixed(0)}</td>
                 <td>
                   <button type="button" className="link" onClick={async () => {
                     await opsRequest(session, arenaId, `/ops/coaching/${entry.id}`, { method: "DELETE" });
@@ -1377,7 +1540,8 @@ function BillingPanel({
   const [entries, setEntries] = useState<any[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
-  const [timing, setTiming] = useState("1 Hour");
+  const [timeFrom, setTimeFrom] = useState("18:00");
+  const [timeTo, setTimeTo] = useState("19:00");
   const [selectedSports, setSelectedSports] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
@@ -1386,6 +1550,7 @@ function BillingPanel({
 
   const amountNum = parseAmount(amount);
   const displayTotal = Number.isFinite(amountNum) ? amountNum : 0;
+  const timingLabel = `${timeFrom} - ${timeTo}`;
 
   async function load() {
     const data = await opsRequest<{ entries: any[] }>(session, arenaId, "/ops/membership-billing");
@@ -1401,13 +1566,14 @@ function BillingPanel({
       if (!customerName.trim()) throw new Error("Customer name is required");
       if (!isValidMobile(customerMobile, true)) throw new Error("Enter a valid 10-digit mobile number");
       if (!Number.isFinite(amountNum) || amountNum <= 0) throw new Error("Enter an amount greater than 0");
+      if (!timeFrom || !timeTo) throw new Error("Select membership time from and to");
       await opsRequest(session, arenaId, "/ops/membership-billing", {
         method: "POST",
         body: JSON.stringify({
           customerName,
           customerMobile: mobileDigits(customerMobile),
           sportName: selectedSports.join(", "),
-          timing,
+          timing: timingLabel,
           bookingMethod: "WALK_IN",
           amount: amountNum,
           paymentMode,
@@ -1415,6 +1581,7 @@ function BillingPanel({
         }),
       });
       setCustomerName(""); setCustomerMobile(""); setSelectedSports([]); setAmount("");
+      setTimeFrom("18:00"); setTimeTo("19:00");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save");
@@ -1443,16 +1610,11 @@ function BillingPanel({
               required
             />
           </label>
-          <label>Timings
-            <select value={timing} onChange={(e) => setTiming(e.target.value)}>
-              <option value="1 Hour">1 Hour</option>
-              <option value="1.5 Hours">1.5 Hours</option>
-              <option value="2 Hours">2 Hours</option>
-              <option value="3 Hours">3 Hours</option>
-              <option value="4 Hours">4 Hours</option>
-              <option value="5 Hours">5 Hours</option>
-              <option value="6 Hours">6 Hours</option>
-            </select>
+          <label>Time from
+            <input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} required />
+          </label>
+          <label>Time to
+            <input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} required />
           </label>
           <label>Amount
             <input type="text" inputMode="decimal" value={amount} placeholder="Enter amount" onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))} />
@@ -1477,7 +1639,7 @@ function BillingPanel({
       </form>
       <div className="ops-table-wrap">
         <table>
-          <thead><tr><th>Bill</th><th>Customer</th><th>Sports</th><th>Timings</th><th>Amount</th></tr></thead>
+          <thead><tr><th>Bill</th><th>Customer</th><th>Sports</th><th>Time</th><th>Amount</th></tr></thead>
           <tbody>
             {entries.map((entry) => (
               <tr key={entry.id}>
@@ -1533,12 +1695,12 @@ function InvoicePanel({
   const [bookingAmount, setBookingAmount] = useState("");
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
-  const [itemQty, setItemQty] = useState("1");
+  const [itemQty, setItemQty] = useState("");
   const [items, setItems] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState("");
   const [advance, setAdvance] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
-  const [billNumber, setBillNumber] = useState("1");
+  const [billNumber, setBillNumber] = useState("");
   const [preview, setPreview] = useState<InvoiceDraft | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{
@@ -1555,7 +1717,15 @@ function InvoicePanel({
 
   async function loadHistory() {
     const data = await opsRequest<{ invoices: typeof history }>(session, arena.id, "/ops/generated-invoices");
-    setHistory(data.invoices.map((row) => ({ ...row, payload: row.payload as InvoiceDraft })));
+    const list = data.invoices.map((row) => ({ ...row, payload: row.payload as InvoiceDraft }));
+    setHistory(list);
+    const maxBill = list.reduce((max, row) => Math.max(max, Number(row.bill_number || 0)), 0);
+    const next = String(maxBill + 1);
+    setBillNumber((current) => {
+      const n = Number(current);
+      if (!current || !Number.isFinite(n) || n <= 0 || n <= maxBill) return next;
+      return current;
+    });
   }
 
   useEffect(() => {
@@ -1577,7 +1747,7 @@ function InvoicePanel({
     }
     setError("");
     setItems((current) => [...current, line]);
-    setItemName(""); setItemPrice(""); setItemQty("1");
+    setItemName(""); setItemPrice(""); setItemQty("");
   }
 
   async function buildPreview(event: FormEvent) {
@@ -1585,12 +1755,9 @@ function InvoicePanel({
     setError("");
     if (!customerName.trim()) return setError("Customer name is required");
     if (!isValidMobile(customerMobile, true)) return setError("Enter a valid 10-digit mobile number");
+    // Include added lines, plus a typed row that was not yet clicked "Add item".
     const pending = pendingLine();
     const allItems = pending ? [...items, pending] : items;
-    if (pending) {
-      setItems(allItems);
-      setItemName(""); setItemPrice(""); setItemQty("1");
-    }
     const booking = Number(bookingAmount || 0);
     const itemsTotal = allItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const disc = Number(discount || 0);
@@ -1598,12 +1765,13 @@ function InvoicePanel({
     const subTotal = booking + itemsTotal;
     const grand = Math.max(0, subTotal - disc - adv);
     if (grand <= 0 && subTotal <= 0) return setError("Enter booking amount or add line items");
+    const nextBill = Number(billNumber) || (history.reduce((max, row) => Math.max(max, Number(row.bill_number || 0)), 0) + 1);
     const draft: InvoiceDraft = {
       arenaName: arena.name,
       arenaAddress: arena.address,
       arenaPincode: arena.pincode,
       arenaPhone: arena.contactPhone,
-      billNumber: Number(billNumber) || 1,
+      billNumber: nextBill,
       customerName,
       customerMobile: mobileDigits(customerMobile),
       sportName: sportName || undefined,
@@ -1634,6 +1802,9 @@ function InvoicePanel({
       });
       setSavedId(saved.invoice.id);
       setPreview(draft);
+      setBillNumber(String(nextBill + 1));
+      setItems([]);
+      setItemName(""); setItemPrice(""); setItemQty("");
       await loadHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save invoice");
@@ -1674,7 +1845,7 @@ function InvoicePanel({
 
       <form className="ops-card" onSubmit={buildPreview}>
         <div className="ops-grid-3">
-          <label>Bill #<input type="number" min={1} max={999999} value={billNumber} onChange={(e) => setBillNumber(e.target.value)} /></label>
+          <label>Bill #<input type="number" min={1} max={999999} value={billNumber} placeholder="Next bill #" onChange={(e) => setBillNumber(e.target.value)} /></label>
           <label>Customer<input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required /></label>
           <label>Mobile
             <input
@@ -1703,9 +1874,10 @@ function InvoicePanel({
         <div className="ops-inline">
           <input placeholder="Item name" value={itemName} onChange={(e) => setItemName(e.target.value)} />
           <input placeholder="Price" value={itemPrice} onChange={(e) => setItemPrice(sanitizeAmountInput(e.target.value))} />
-          <input placeholder="Qty" value={itemQty} onChange={(e) => setItemQty(e.target.value.replace(/\D/g, "") || "1")} />
+          <input placeholder="Qty" value={itemQty} onChange={(e) => setItemQty(e.target.value.replace(/\D/g, ""))} />
           <button type="button" className="primary" onClick={addLine}>Add item</button>
         </div>
+        {!items.length && <p className="ops-muted">No items yet — add only when needed. Empty items are not shown on the invoice.</p>}
         {!!items.length && (
           <ul className="ops-cart">
             {items.map((item, index) => (
@@ -1725,7 +1897,7 @@ function InvoicePanel({
         <h3>Saved invoices</h3>
         {history.length === 0 && <p className="ops-muted">No saved invoices yet.</p>}
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {history.map((row) => (
+          {[...history].sort((a, b) => Number(a.bill_number || 0) - Number(b.bill_number || 0)).map((row) => (
             <li key={row.id} style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #e2e8f0" }}>
               <div>
                 <strong>#{row.bill_number} · {row.customer_name}</strong>
@@ -1750,33 +1922,83 @@ function InvoiceView({
   onClose: () => void;
   onRemove?: () => void | Promise<void>;
 }) {
-  function printInvoice() {
-    window.print();
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  async function loadHtml2Pdf(): Promise<any> {
+    const w = window as any;
+    if (w.html2pdf) return w.html2pdf;
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Unable to load PDF library"));
+      document.body.appendChild(script);
+    });
+    return (window as any).html2pdf;
   }
 
-  function shareWhatsApp() {
-    const courts = draft.courtNames?.length ? draft.courtNames.join(", ") : "N/A";
-    let message = `*${draft.arenaName}*\nPayment Receipt\n\n`;
-    if (draft.arenaAddress) message += `${draft.arenaAddress}${draft.arenaPincode ? ` - ${draft.arenaPincode}` : ""}\n`;
-    if (draft.arenaPhone) message += `Ph: +91 ${draft.arenaPhone}\n\n`;
-    message += `Customer: ${draft.customerName}\n`;
-    message += `Bill No: ${draft.billNumber}\n`;
-    if (draft.sportName) {
-      message += `Sport: ${draft.sportName}\n`;
-      message += `Court: ${courts}\n`;
-      if (draft.bookingDate) message += `Booking Date: ${draft.bookingDate}\n`;
-      if (draft.startTime) message += `Time: ${draft.startTime} - ${draft.endTime}\n`;
-      message += `Booking Amount: ₹${draft.bookingAmount}\n`;
+  async function makePdfBlob(): Promise<Blob> {
+    const el = document.getElementById("printable-invoice");
+    if (!el) throw new Error("Invoice preview not found");
+    const html2pdf = await loadHtml2Pdf();
+    return html2pdf()
+      .set({
+        margin: [8, 8, 8, 8],
+        filename: `invoice-${draft.billNumber}.pdf`,
+        image: { type: "jpeg", quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(el)
+      .outputPdf("blob");
+  }
+
+  async function downloadPdf() {
+    setPdfBusy(true);
+    try {
+      const blob = await makePdfBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-${draft.billNumber}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Unable to download PDF");
+    } finally {
+      setPdfBusy(false);
     }
-    if (draft.items.length) {
-      message += "Items:\n";
-      message += draft.items.map((i) => `- ${i.name} | Qty ${i.quantity} | ₹${i.price} | Total ₹${i.price * i.quantity}`).join("\n") + "\n";
+  }
+
+  async function shareWhatsAppPdf() {
+    setPdfBusy(true);
+    try {
+      const blob = await makePdfBlob();
+      const file = new File([blob], `invoice-${draft.billNumber}.pdf`, { type: "application/pdf" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Invoice #${draft.billNumber}`,
+        });
+        return;
+      }
+      // Desktop / unsupported share: download PDF only (no invoice text message).
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-${draft.billNumber}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      window.alert("PDF downloaded. Attach that file in WhatsApp to share the invoice.");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Unable to share PDF");
+    } finally {
+      setPdfBusy(false);
     }
-    if (draft.discount > 0) message += `Discount: −₹${draft.discount}\n`;
-    message += `\n*Total: ₹${draft.grandTotal.toFixed(2)}*\n`;
-    message += `Payment Mode: ${draft.paymentMode}\n\nThank you for choosing ${draft.arenaName}!`;
-    const phone = draft.customerMobile ? `91${draft.customerMobile.replace(/^91/, "")}` : "";
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+  }
+
+  function printInvoice() {
+    window.print();
   }
 
   return (
@@ -1787,7 +2009,12 @@ function InvoiceView({
           <h2>Invoice Preview</h2>
         </div>
         <div className="ops-inline">
-          <button type="button" className="primary" onClick={shareWhatsApp}>WhatsApp</button>
+          <button type="button" className="primary" disabled={pdfBusy} onClick={() => { void downloadPdf(); }}>
+            {pdfBusy ? "Preparing…" : "Download PDF"}
+          </button>
+          <button type="button" className="primary" disabled={pdfBusy} onClick={() => { void shareWhatsAppPdf(); }}>
+            WhatsApp PDF
+          </button>
           <button type="button" className="primary" onClick={printInvoice}>Print</button>
           {onRemove && <button type="button" className="link" onClick={() => { void onRemove(); }}>Remove</button>}
         </div>
@@ -1828,21 +2055,21 @@ function InvoiceView({
             </tbody>
           </table>
         )}
-        <table>
-          <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
-          <tbody>
-            {draft.items.length ? draft.items.map((item, idx) => (
-              <tr key={`${item.name}-${idx}`}>
-                <td>{item.name}</td>
-                <td>{item.quantity}</td>
-                <td>₹{Number(item.price).toFixed(2)}</td>
-                <td>₹{(Number(item.price) * Number(item.quantity)).toFixed(2)}</td>
-              </tr>
-            )) : (
-              <tr><td colSpan={4}>No items added</td></tr>
-            )}
-          </tbody>
-        </table>
+        {draft.items.length > 0 && (
+          <table>
+            <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+            <tbody>
+              {draft.items.map((item, idx) => (
+                <tr key={`${item.name}-${idx}`}>
+                  <td>{item.name}</td>
+                  <td>{item.quantity}</td>
+                  <td>₹{Number(item.price).toFixed(2)}</td>
+                  <td>₹{(Number(item.price) * Number(item.quantity)).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
         <div className="invoice-totals">
           <p>Sub total: ₹{draft.subTotal.toFixed(2)}</p>
           {draft.discount > 0 && <p>Discount: −₹{draft.discount.toFixed(2)}</p>}
@@ -2132,10 +2359,19 @@ function MenuPanel({
                     <td>
                       <input
                         type="number"
-                        value={item.price}
-                        onChange={(e) => setLocalInv((rows) => rows.map((row) => row.id === item.id ? { ...row, price: Number(e.target.value) } : row))}
+                        min={0}
+                        step="0.01"
+                        placeholder="—"
+                        value={item.price === 0 ? "" : item.price}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const price = raw === "" ? 0 : Number(raw);
+                          setLocalInv((rows) => rows.map((row) => row.id === item.id ? { ...row, price: Number.isFinite(price) ? price : 0 } : row));
+                        }}
                         onBlur={(e) => {
-                          const next = { ...item, price: Number(e.target.value) };
+                          const raw = e.target.value;
+                          const price = raw === "" ? 0 : Number(raw);
+                          const next = { ...item, price: Number.isFinite(price) && price >= 0 ? price : 0 };
                           setLocalInv((rows) => rows.map((row) => row.id === item.id ? next : row));
                           void saveItem(next);
                         }}
@@ -2144,10 +2380,19 @@ function MenuPanel({
                     <td>
                       <input
                         type="number"
-                        value={item.stock}
-                        onChange={(e) => setLocalInv((rows) => rows.map((row) => row.id === item.id ? { ...row, stock: Number(e.target.value) } : row))}
+                        min={0}
+                        step="1"
+                        placeholder="—"
+                        value={item.stock === 0 ? "" : item.stock}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const stock = raw === "" ? 0 : Number(raw);
+                          setLocalInv((rows) => rows.map((row) => row.id === item.id ? { ...row, stock: Number.isFinite(stock) ? Math.max(0, Math.floor(stock)) : 0 } : row));
+                        }}
                         onBlur={(e) => {
-                          const next = { ...item, stock: Number(e.target.value) };
+                          const raw = e.target.value;
+                          const stock = raw === "" ? 0 : Number(raw);
+                          const next = { ...item, stock: Number.isFinite(stock) && stock >= 0 ? Math.floor(stock) : 0 };
                           setLocalInv((rows) => rows.map((row) => row.id === item.id ? next : row));
                           void saveItem(next);
                         }}
@@ -2173,11 +2418,20 @@ function MenuPanel({
               <div className="ops-sport-block-head">
                 <h3>{sport.name}</h3>
                 <label>₹/hr
-                  <input type="number" defaultValue={sport.pricePerHour} onBlur={async (e) => {
+                  <input
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="—"
+                    defaultValue={sport.pricePerHour === 0 ? "" : sport.pricePerHour}
+                    key={`${sport.id}-${sport.pricePerHour}`}
+                    onBlur={async (e) => {
                     try {
+                      const raw = e.target.value;
+                      const pricePerHour = raw === "" ? 0 : Number(raw);
                       await opsRequest(session, arenaId, `/ops/sports/${sport.id}`, {
                         method: "PATCH",
-                        body: JSON.stringify({ pricePerHour: Number(e.target.value) }),
+                        body: JSON.stringify({ pricePerHour: Number.isFinite(pricePerHour) && pricePerHour >= 0 ? pricePerHour : 0 }),
                       });
                       await onChanged();
                     } catch (err) {

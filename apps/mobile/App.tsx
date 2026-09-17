@@ -54,8 +54,12 @@ function userNeedsPasswordSetup(user: User | null | undefined) {
 function isEntitled(arena: Arena) {
   const now = Date.now();
   const status = arena.status === "created" ? "trialing" : arena.status;
-  if (status === "active" || status === "authenticated") return true;
   if (status === "trialing" && arena.trial_ends_at && new Date(arena.trial_ends_at).getTime() > now) return true;
+  if (status === "active" || status === "authenticated") {
+    // Paid plan: if renew date is set and past, block access (same rule as API).
+    if (arena.current_period_ends_at && new Date(arena.current_period_ends_at).getTime() <= now) return false;
+    return true;
+  }
   return false;
 }
 
@@ -173,7 +177,7 @@ function AppBody() {
       }>;
       role?: AppRole | null;
       sports?: string[];
-      subscription?: { status: string; trial_ends_at: string | null } | null;
+      subscription?: { status: string; trial_ends_at: string | null; current_period_ends_at?: string | null } | null;
     }>(session, "/me/bootstrap")
       .then(async ({ memberships, role: roleFromApi, subscription }) => {
         const rawOrg = memberships[0]?.organizations;
@@ -191,6 +195,7 @@ function AppBody() {
           id: organization.id,
           name: organization.name,
           trial_ends_at: subscription?.trial_ends_at ?? null,
+          current_period_ends_at: subscription?.current_period_ends_at ?? null,
           status: rawStatus === "created" ? "trialing" : rawStatus,
           address: organization.address ?? "",
           pincode: organization.pincode ?? "",
