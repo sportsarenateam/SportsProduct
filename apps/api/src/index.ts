@@ -520,7 +520,12 @@ app.post("/subscriptions/checkout", express.json(), authenticate, membership, re
     const phoneDigits = String(org?.contact_phone ?? "").replace(/\D/g, "");
     const customerPhone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : "9999999999";
     const orderId = `sa_${String(req.organizationId).replace(/-/g, "").slice(0, 12)}_${Date.now()}`;
-    const returnUrl = `${appOrigin.replace(/\/$/, "")}/app?cf_order={order_id}`;
+    // Prefer the browser Origin (Vercel URL) so mobile return works; fall back to APP_URL.
+    const requestOrigin = String(req.get("origin") || "").replace(/\/$/, "");
+    const safeOrigin = requestOrigin && (allowedOrigins.length === 0 || allowedOrigins.includes(requestOrigin))
+      ? requestOrigin
+      : appOrigin.replace(/\/$/, "");
+    const returnUrl = `${safeOrigin}/app?cf_order={order_id}`;
 
     const order = await createCashfreeOrder(cashfreeConfig, {
       orderId,

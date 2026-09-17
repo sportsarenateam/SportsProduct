@@ -420,17 +420,21 @@ function SubscriptionGate({
       const cashfree = CashfreeCheckout({
         mode: checkout.env === "production" ? "production" : "sandbox",
       });
+      // Mobile Chrome (esp. UPI): Cashfree modal/iframe fails — force full-page checkout.
+      const ua = navigator.userAgent || "";
+      const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua)
+        || window.matchMedia("(max-width: 820px), (pointer: coarse)").matches;
       const result = await cashfree.checkout({
         paymentSessionId: checkout.paymentSessionId,
-        redirectTarget: "_modal",
+        redirectTarget: isMobile ? "_self" : "_modal",
       });
       if (result?.error) {
         setError(result.error.message || result.error || "Payment cancelled or failed");
         setBusy(false);
         return;
       }
-      if (result?.redirect) {
-        // Cashfree will navigate to return_url; recovery effect confirms payment.
+      if (result?.redirect || isMobile) {
+        // Full-page redirect → return_url (?cf_order=) recovers and verifies.
         setBusy(false);
         return;
       }
