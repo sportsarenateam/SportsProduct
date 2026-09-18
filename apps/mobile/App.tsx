@@ -13,6 +13,7 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { BookingScreen } from "./screens/BookingScreen";
 import { CoachingScreen } from "./screens/CoachingScreen";
 import { MembershipScreen } from "./screens/MembershipScreen";
+import { MembershipExpiringScreen } from "./screens/MembershipExpiringScreen";
 import { InvoiceScreen } from "./screens/InvoiceScreen";
 import { MenuScreen } from "./screens/MenuScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
@@ -435,6 +436,17 @@ function AppBody() {
         session={session}
         arenaId={arena.id}
         sports={sports}
+        onBack={() => setPage("home")}
+      />
+    );
+  }
+  if (page === "expiring") {
+    return (
+      <MembershipExpiringScreen
+        session={session}
+        arenaId={arena.id}
+        arenaName={arena.name}
+        arenaPhone={arena.contactPhone}
         onBack={() => setPage("home")}
       />
     );

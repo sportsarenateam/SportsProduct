@@ -34,6 +34,8 @@ type InvoiceDraft = {
   sportName?: string;
   courtNames: string[];
   bookingDate: string;
+  startDate: string;
+  endDate: string;
   startTime: string;
   endTime: string;
   bookingAmount: number;
@@ -61,6 +63,7 @@ function draftToText(draft: InvoiceDraft) {
     draft.arenaName,
     [draft.arenaAddress, draft.arenaPincode].filter(Boolean).join(", "),
     draft.arenaPhone ? `Ph: ${draft.arenaPhone}` : "",
+    (draft.startDate || draft.endDate) ? `Period: ${draft.startDate || "—"} → ${draft.endDate || "—"}` : "",
     `Bill #${draft.billNumber}`,
     `Customer: ${draft.customerName} (${draft.customerMobile})`,
     draft.sportName ? `Sport: ${draft.sportName}` : "",
@@ -88,6 +91,8 @@ export function InvoiceScreen({
   const [sportName, setSportName] = useState("");
   const [courtNames, setCourtNames] = useState("");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState("19:00");
   const [bookingAmount, setBookingAmount] = useState("");
@@ -128,6 +133,8 @@ export function InvoiceScreen({
     setError("");
     if (!customerName.trim()) return setError("Customer name is required");
     if (!isValidMobile(customerMobile, true)) return setError("Enter a valid 10-digit mobile number");
+    if (!startDate.trim() || !endDate.trim()) return setError("Start date and end date are required");
+    if (endDate < startDate) return setError("End date must be on or after start date");
     const pending = pendingLine();
     const allItems = pending ? [...items, pending] : items;
     if (pending) {
@@ -155,6 +162,8 @@ export function InvoiceScreen({
       sportName: sportName || undefined,
       courtNames: courtNames ? courtNames.split(",").map((s) => s.trim()).filter(Boolean) : [],
       bookingDate,
+      startDate,
+      endDate,
       startTime,
       endTime,
       bookingAmount: booking,
@@ -249,11 +258,15 @@ export function InvoiceScreen({
         <Field value={sportName} onChangeText={setSportName} placeholder="Optional" />
         <Label>Courts</Label>
         <Field value={courtNames} onChangeText={setCourtNames} placeholder="Comma separated" />
-        <Label>Date</Label>
-        <Field value={bookingDate} onChangeText={setBookingDate} />
-        <Label>Start</Label>
+        <Label>Start date (YYYY-MM-DD)</Label>
+        <Field value={startDate} onChangeText={setStartDate} autoCapitalize="none" />
+        <Label>End date (YYYY-MM-DD)</Label>
+        <Field value={endDate} onChangeText={setEndDate} autoCapitalize="none" />
+        <Label>Session date</Label>
+        <Field value={bookingDate} onChangeText={setBookingDate} autoCapitalize="none" />
+        <Label>Start time</Label>
         <Field value={startTime} onChangeText={setStartTime} />
-        <Label>End</Label>
+        <Label>End time</Label>
         <Field value={endTime} onChangeText={setEndTime} />
         <Label>Booking amount</Label>
         <Field

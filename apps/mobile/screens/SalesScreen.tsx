@@ -208,10 +208,10 @@ export function SalesScreen({
       },
       {
         name: "Membership",
-        headers: ["Bill", "Created", "Customer", "Mobile", "Sport", "Time", "Amount", "Payment"],
+        headers: ["Bill", "Created", "Customer", "Mobile", "Sport", "StartDate", "EndDate", "Time", "Amount", "Payment"],
         rows: filteredMembership.map((row) => [
           row.bill_number, row.created_at, row.customer_name, row.customer_mobile,
-          row.sport_name, row.timing, Number(row.amount || 0), row.payment_mode,
+          row.sport_name, row.start_date || "", row.end_date || "", row.timing, Number(row.amount || 0), row.payment_mode,
         ]),
       },
       {
@@ -391,7 +391,7 @@ export function SalesScreen({
       {tab === "MEMBERSHIP" && filteredMembership.map((row) => (
         <Card key={row.id}>
           <Text style={styles.rowTitle}>#{row.bill_number} · {row.customer_name}</Text>
-          <Muted>{row.sport_name || "—"} · {row.timing}</Muted>
+          <Muted>{row.sport_name || "—"} · {row.start_date || "—"} → {row.end_date || "—"} · {row.timing}</Muted>
           <Text style={styles.rowAmt}>₹{Number(row.amount || 0).toFixed(0)}</Text>
           <Pressable onPress={() => confirmDelete("membership entry", async () => {
             await opsRequest(session, arenaId, `/ops/membership-billing/${row.id}`, { method: "DELETE" });

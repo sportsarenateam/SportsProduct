@@ -135,6 +135,7 @@ function pathToWorkspacePage(pathname: string): WorkspacePage {
   if (pathname === "/app/sales") return "sales";
   if (pathname === "/app/coaching") return "coaching";
   if (pathname === "/app/billing") return "billing";
+  if (pathname === "/app/expiring") return "expiring";
   if (pathname === "/app/invoice") return "invoice";
   if (pathname === "/app/menu") return "menu";
   if (pathname === "/app/profile") return "profile";

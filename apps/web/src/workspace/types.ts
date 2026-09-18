@@ -24,7 +24,7 @@ export type CartItem = {
   category: "EQUIPMENT" | "BEVERAGE";
 };
 
-export type WorkspacePage = "home" | "sales" | "coaching" | "billing" | "menu" | "booking" | "invoice" | "profile";
+export type WorkspacePage = "home" | "sales" | "coaching" | "billing" | "expiring" | "menu" | "booking" | "invoice" | "profile";
 
 /** DB roles: owner = arena creator; manager = staff (ops without Sales Report). */
 export type AppRole = "owner" | "manager" | "cashier";

@@ -344,19 +344,22 @@ export function registerOpsRoutes(
   app.post("/ops/membership-billing", json, ...withOrg, async (req: AuthedRequest, res) => {
     const input = z.object({
       customerName: z.string().trim().min(1),
-      customerMobile: z.string().default(""),
+      customerMobile: z.string().trim().min(1, "Mobile number is required"),
       sportName: z.string().default(""),
       timing: z.string().default(""),
       bookingMethod: z.string().default("WALK_IN"),
       amount: z.number().positive("Amount must be greater than 0"),
       paymentMode: z.enum(["CASH", "ONLINE"]).default("CASH"),
+      startDate: z.string().min(1, "Start date is required"),
+      endDate: z.string().min(1, "End date is required"),
       items: z.array(cartItemSchema).default([]),
     }).parse(req.body);
-    if (input.customerMobile) {
-      const digits = input.customerMobile.replace(/\D/g, "");
-      if (digits.length !== 10) {
-        return res.status(400).json({ error: "Mobile number must be exactly 10 digits" });
-      }
+    const mobileDigitsOnly = input.customerMobile.replace(/\D/g, "");
+    if (mobileDigitsOnly.length !== 10) {
+      return res.status(400).json({ error: "Mobile number must be exactly 10 digits" });
+    }
+    if (input.endDate < input.startDate) {
+      return res.status(400).json({ error: "End date must be on or after start date" });
     }
     const { data: latest } = await db.from("membership_billing").select("bill_number").eq("organization_id", req.organizationId!).order("bill_number", { ascending: false }).limit(1);
     const next = (latest?.[0]?.bill_number ?? 0) + 1;
@@ -366,12 +369,14 @@ export function registerOpsRoutes(
       organization_id: req.organizationId!,
       bill_number: billNumber,
       customer_name: input.customerName,
-      customer_mobile: input.customerMobile,
+      customer_mobile: mobileDigitsOnly,
       sport_name: input.sportName,
       timing: input.timing,
       booking_method: input.bookingMethod,
       amount: input.amount,
       payment_mode: input.paymentMode,
+      start_date: input.startDate,
+      end_date: input.endDate,
       items: input.items,
       created_by: req.user!.id,
     }).select("*").single();
@@ -384,6 +389,30 @@ export function registerOpsRoutes(
     const { error } = await db.from("membership_billing").delete().eq("id", req.params.id).eq("organization_id", req.organizationId!);
     if (error) return res.status(400).json({ error: error.message });
     res.json({ ok: true });
+  });
+
+  /** Memberships expiring soon (for staff one-tap WhatsApp remind). Default within 1 day. */
+  app.get("/ops/membership-reminders", ...withOrg, async (req: AuthedRequest, res) => {
+    const withinDays = Math.max(0, Math.min(30, Number(req.query.withinDays ?? 1)));
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const until = new Date(now.getFullYear(), now.getMonth(), now.getDate() + withinDays);
+    const untilIso = `${until.getFullYear()}-${pad(until.getMonth() + 1)}-${pad(until.getDate())}`;
+
+    const { data, error } = await db
+      .from("membership_billing")
+      .select("id, bill_number, customer_name, customer_mobile, sport_name, timing, start_date, end_date, amount")
+      .eq("organization_id", req.organizationId!)
+      .not("end_date", "is", null)
+      .gte("end_date", todayIso)
+      .lte("end_date", untilIso)
+      .order("end_date", { ascending: true })
+      .limit(100);
+    if (error) return res.status(400).json({ error: error.message });
+
+    const entries = (data ?? []).filter((row) => String(row.customer_mobile || "").replace(/\D/g, "").length === 10);
+    res.json({ entries, withinDays, from: todayIso, to: untilIso });
   });
 
   app.get("/ops/profile", ...withOrg, async (req: AuthedRequest, res) => {

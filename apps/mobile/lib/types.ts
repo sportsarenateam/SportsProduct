@@ -41,6 +41,7 @@ export type MobilePage =
   | "booking"
   | "coaching"
   | "billing"
+  | "expiring"
   | "invoice"
   | "menu"
   | "profile"

@@ -127,6 +127,7 @@ const modules = [
   { id: "sales" as const, label: "Sales Report", tone: "purple", icon: "bag" },
   { id: "coaching" as const, label: "Coaching", tone: "teal", icon: "people" },
   { id: "billing" as const, label: "Membership", tone: "rose", icon: "doc" },
+  { id: "expiring" as const, label: "Membership expiring", tone: "amber", icon: "people" },
   { id: "invoice" as const, label: "Generate Invoice", tone: "indigo", icon: "doc" },
   { id: "menu" as const, label: "Manage Menu", tone: "indigo", icon: "grid" },
   { id: "profile" as const, label: "Profile", tone: "amber", icon: "people" },
@@ -431,6 +432,15 @@ export function WorkspaceApp({
         {canUseApp && page === "sales" && isOwner && <SalesPanel session={session} arenaId={arena.id} onBack={() => setPage("home")} />}
         {canUseApp && page === "coaching" && <CoachingPanel session={session} arenaId={arena.id} onBack={() => setPage("home")} />}
         {canUseApp && page === "billing" && <BillingPanel session={session} arenaId={arena.id} sports={sports} onBack={() => setPage("home")} />}
+        {canUseApp && page === "expiring" && (
+          <MembershipExpiringPanel
+            session={session}
+            arenaId={arena.id}
+            arenaName={arena.name}
+            arenaPhone={arena.contactPhone}
+            onBack={() => setPage("home")}
+          />
+        )}
         {canUseApp && page === "invoice" && (
           <InvoicePanel
             session={session}
@@ -1196,10 +1206,10 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       },
       {
         name: "Membership",
-        headers: ["Bill", "Created", "Customer", "Mobile", "Sport", "Time", "Amount", "Payment"],
+        headers: ["Bill", "Created", "Customer", "Mobile", "Sport", "StartDate", "EndDate", "Time", "Amount", "Payment"],
         rows: filteredMembership.map((row) => [
           row.bill_number, row.created_at, row.customer_name, row.customer_mobile,
-          row.sport_name, row.timing, Number(row.amount || 0), row.payment_mode,
+          row.sport_name, row.start_date || "", row.end_date || "", row.timing, Number(row.amount || 0), row.payment_mode,
         ]),
       },
       {
@@ -1375,13 +1385,14 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
       {tab === "MEMBERSHIP" && (
         <div className="ops-table-wrap">
           <table>
-            <thead><tr><th>Bill</th><th>Customer</th><th>Sports</th><th>Time</th><th>Amount</th><th></th></tr></thead>
+            <thead><tr><th>Bill</th><th>Customer</th><th>Sports</th><th>Period</th><th>Time</th><th>Amount</th><th></th></tr></thead>
             <tbody>
               {filteredMembership.map((row) => (
                 <tr key={row.id}>
                   <td>#{row.bill_number}</td>
                   <td>{row.customer_name}</td>
                   <td>{row.sport_name || "—"}</td>
+                  <td>{row.start_date || "—"} → {row.end_date || "—"}</td>
                   <td>{row.timing || "—"}</td>
                   <td>₹{Number(row.amount).toFixed(0)}</td>
                   <td><button type="button" className="link" onClick={() => removeMembership(row.id)}>Delete</button></td>
@@ -1532,16 +1543,124 @@ function CoachingPanel({ session, arenaId, onBack }: { session: Session; arenaId
   );
 }
 
+function MembershipExpiringPanel({
+  session, arenaId, arenaName, arenaPhone, onBack,
+}: {
+  session: Session; arenaId: string; arenaName: string; arenaPhone?: string; onBack: () => void;
+}) {
+  const [entries, setEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await opsRequest<{ entries: any[] }>(session, arenaId, "/ops/membership-reminders?withinDays=1");
+      setEntries(data.entries ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load expiring memberships");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load().catch(() => undefined);
+  }, [session.access_token, arenaId]);
+
+  function remind(entry: { customer_name: string; customer_mobile: string; end_date?: string | null }) {
+    const digits = mobileDigits(entry.customer_mobile);
+    if (digits.length !== 10) return;
+    const endLabel = entry.end_date
+      ? new Date(`${entry.end_date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+      : "soon";
+    const helpdesk = arenaPhone ? mobileDigits(arenaPhone) : "";
+    const contactLine = helpdesk.length === 10
+      ? `To renew, please contact ${arenaName} help desk at +91 ${helpdesk}.`
+      : `To renew, please contact ${arenaName}.`;
+    const message = `Hi ${entry.customer_name}, thanks for choosing ${arenaName}! Your membership is going to expire on ${endLabel}. We'd love to have you back on court — renew now so you don't miss your sessions. ${contactLine} See you soon!`;
+    window.open(`https://wa.me/91${digits}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  }
+
+  async function removeEntry(entry: { id: string; customer_name: string }) {
+    if (!window.confirm(`Delete ${entry.customer_name}'s membership? Use this after they renew.`)) return;
+    setError("");
+    try {
+      await opsRequest(session, arenaId, `/ops/membership-billing/${entry.id}`, { method: "DELETE" });
+      setEntries((current) => current.filter((row) => row.id !== entry.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete membership");
+    }
+  }
+
+  return (
+    <div className="ops-panel">
+      <header className="ops-panel-head">
+        <div>
+          <button type="button" className="link" onClick={onBack}>← Back</button>
+          <h2>Membership expiring</h2>
+          <p className="ops-muted">Members ending today or tomorrow. Remind via WhatsApp; Delete after they renew.</p>
+        </div>
+        <button type="button" className="link" onClick={() => load().catch(() => undefined)}>Refresh</button>
+      </header>
+      {error && <p className="workspace-notice">{error}</p>}
+      {loading ? (
+        <p className="ops-muted">Loading…</p>
+      ) : entries.length === 0 ? (
+        <div className="ops-card">
+          <p>No memberships expiring within 1 day.</p>
+        </div>
+      ) : (
+        <div className="ops-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>End date</th>
+                <th>Mobile</th>
+                <th>Sports</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.customer_name}</td>
+                  <td>{entry.end_date || "—"}</td>
+                  <td>{entry.customer_mobile || "—"}</td>
+                  <td>{entry.sport_name || "—"}</td>
+                  <td style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button type="button" className="primary" onClick={() => remind(entry)}>
+                      Remind
+                    </button>
+                    <button type="button" className="link" onClick={() => removeEntry(entry).catch(() => undefined)}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BillingPanel({
   session, arenaId, sports, onBack,
 }: {
   session: Session; arenaId: string; sports: SportConfig[]; onBack: () => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
   const [entries, setEntries] = useState<any[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
   const [timeFrom, setTimeFrom] = useState("18:00");
   const [timeTo, setTimeTo] = useState("19:00");
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const [selectedSports, setSelectedSports] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
@@ -1567,6 +1686,8 @@ function BillingPanel({
       if (!isValidMobile(customerMobile, true)) throw new Error("Enter a valid 10-digit mobile number");
       if (!Number.isFinite(amountNum) || amountNum <= 0) throw new Error("Enter an amount greater than 0");
       if (!timeFrom || !timeTo) throw new Error("Select membership time from and to");
+      if (!startDate || !endDate) throw new Error("Select membership start and end dates");
+      if (endDate < startDate) throw new Error("End date must be on or after start date");
       await opsRequest(session, arenaId, "/ops/membership-billing", {
         method: "POST",
         body: JSON.stringify({
@@ -1577,11 +1698,14 @@ function BillingPanel({
           bookingMethod: "WALK_IN",
           amount: amountNum,
           paymentMode,
+          startDate,
+          endDate,
           items: [],
         }),
       });
       setCustomerName(""); setCustomerMobile(""); setSelectedSports([]); setAmount("");
       setTimeFrom("18:00"); setTimeTo("19:00");
+      setStartDate(today); setEndDate(today);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save");
@@ -1610,6 +1734,12 @@ function BillingPanel({
               required
             />
           </label>
+          <label>Start date
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+          </label>
+          <label>End date
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+          </label>
           <label>Time from
             <input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} required />
           </label>
@@ -1625,7 +1755,7 @@ function BillingPanel({
             </select>
           </label>
         </div>
-        <p className="ops-muted">Select sports for this membership (optional).</p>
+        <p className="ops-muted">Select sports for this membership (optional). Expiry WhatsApp reminders use the end date + mobile number.</p>
         <div className="ops-chip-row">
           {sports.map((sport) => (
             <button type="button" key={sport.id} className={selectedSports.includes(sport.name) ? "chip active" : "chip"}
@@ -1639,13 +1769,15 @@ function BillingPanel({
       </form>
       <div className="ops-table-wrap">
         <table>
-          <thead><tr><th>Bill</th><th>Customer</th><th>Sports</th><th>Time</th><th>Amount</th></tr></thead>
+          <thead><tr><th>Bill</th><th>Customer</th><th>Mobile</th><th>Sports</th><th>Period</th><th>Time</th><th>Amount</th></tr></thead>
           <tbody>
             {entries.map((entry) => (
               <tr key={entry.id}>
                 <td>#{entry.bill_number}</td>
                 <td>{entry.customer_name}</td>
+                <td>{entry.customer_mobile || "—"}</td>
                 <td>{entry.sport_name || "—"}</td>
+                <td>{entry.start_date || "—"} → {entry.end_date || "—"}</td>
                 <td>{entry.timing}</td>
                 <td>₹{Number(entry.amount).toFixed(0)}</td>
               </tr>
@@ -1668,6 +1800,8 @@ type InvoiceDraft = {
   sportName?: string;
   courtNames?: string[];
   bookingDate?: string;
+  startDate?: string;
+  endDate?: string;
   startTime?: string;
   endTime?: string;
   bookingAmount: number;
@@ -1690,6 +1824,8 @@ function InvoicePanel({
   const [sportName, setSportName] = useState("");
   const [courtNames, setCourtNames] = useState("");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState("19:00");
   const [bookingAmount, setBookingAmount] = useState("");
@@ -1755,6 +1891,8 @@ function InvoicePanel({
     setError("");
     if (!customerName.trim()) return setError("Customer name is required");
     if (!isValidMobile(customerMobile, true)) return setError("Enter a valid 10-digit mobile number");
+    if (!startDate || !endDate) return setError("Start date and end date are required");
+    if (endDate < startDate) return setError("End date must be on or after start date");
     // Include added lines, plus a typed row that was not yet clicked "Add item".
     const pending = pendingLine();
     const allItems = pending ? [...items, pending] : items;
@@ -1777,6 +1915,8 @@ function InvoicePanel({
       sportName: sportName || undefined,
       courtNames: courtNames ? courtNames.split(",").map((s) => s.trim()).filter(Boolean) : [],
       bookingDate,
+      startDate,
+      endDate,
       startTime,
       endTime,
       bookingAmount: booking,
@@ -1858,9 +1998,11 @@ function InvoicePanel({
           </label>
           <label>Sport<input value={sportName} onChange={(e) => setSportName(e.target.value)} /></label>
           <label>Courts<input value={courtNames} onChange={(e) => setCourtNames(e.target.value)} placeholder="Court 1, Court 2" /></label>
-          <label>Date<input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} /></label>
-          <label>Start<input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></label>
-          <label>End<input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /></label>
+          <label>Start date<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required /></label>
+          <label>End date<input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required /></label>
+          <label>Session date<input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} /></label>
+          <label>Start time<input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></label>
+          <label>End time<input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /></label>
           <label>Booking amount<input type="text" inputMode="decimal" value={bookingAmount} placeholder="Enter amount" onChange={(e) => setBookingAmount(sanitizeAmountInput(e.target.value))} /></label>
           <label>Discount<input type="text" inputMode="decimal" value={discount} placeholder="Optional" onChange={(e) => setDiscount(sanitizeAmountInput(e.target.value))} /></label>
           <label>Advance<input type="text" inputMode="decimal" value={advance} placeholder="Optional" onChange={(e) => setAdvance(sanitizeAmountInput(e.target.value))} /></label>
@@ -2038,6 +2180,9 @@ function InvoiceView({
             {draft.customerMobile && <p>+91 {draft.customerMobile}</p>}
           </div>
           <div>
+            {(draft.startDate || draft.endDate) && (
+              <p><b>Period:</b> {draft.startDate || "—"} → {draft.endDate || "—"}</p>
+            )}
             <p><b>Bill No:</b> #{draft.billNumber}</p>
             <p><b>Method:</b> {draft.bookingMethod.replace(/_/g, " ")}</p>
           </div>

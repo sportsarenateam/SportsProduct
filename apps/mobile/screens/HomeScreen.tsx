@@ -8,6 +8,7 @@ const allModules: Array<{ id: MobilePage; label: string; tone: string; ownerOnly
   { id: "sales", label: "Sales Report", tone: "#6d28d9", ownerOnly: true },
   { id: "coaching", label: "Coaching", tone: "#0f766e" },
   { id: "billing", label: "Membership", tone: "#be123c" },
+  { id: "expiring", label: "Membership expiring", tone: "#b45309" },
   { id: "invoice", label: "Generate Invoice", tone: "#4338ca" },
   { id: "menu", label: "Manage Menu", tone: "#1d4ed8" },
   { id: "profile", label: "Profile", tone: "#b45309" },

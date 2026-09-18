@@ -33,11 +33,14 @@ export function MembershipScreen({
   sports: SportConfig[];
   onBack: () => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
   const [entries, setEntries] = useState<any[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
   const [timeFrom, setTimeFrom] = useState("18:00");
   const [timeTo, setTimeTo] = useState("19:00");
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const [selectedSports, setSelectedSports] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
@@ -64,6 +67,8 @@ export function MembershipScreen({
       if (!isValidMobile(customerMobile, true)) throw new Error("Enter a valid 10-digit mobile number");
       if (!Number.isFinite(amountNum) || amountNum <= 0) throw new Error("Enter an amount greater than 0");
       if (!timeFrom.trim() || !timeTo.trim()) throw new Error("Select membership time from and to");
+      if (!startDate.trim() || !endDate.trim()) throw new Error("Select membership start and end dates");
+      if (endDate < startDate) throw new Error("End date must be on or after start date");
       await opsRequest(session, arenaId, "/ops/membership-billing", {
         method: "POST",
         body: JSON.stringify({
@@ -74,6 +79,8 @@ export function MembershipScreen({
           bookingMethod: "WALK_IN",
           amount: amountNum,
           paymentMode,
+          startDate,
+          endDate,
           items: [],
         }),
       });
@@ -83,6 +90,8 @@ export function MembershipScreen({
       setAmount("");
       setTimeFrom("18:00");
       setTimeTo("19:00");
+      setStartDate(today);
+      setEndDate(today);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save");
@@ -104,20 +113,14 @@ export function MembershipScreen({
           value={customerMobile}
           onChangeText={(v) => setCustomerMobile(sanitizeMobileInput(v))}
         />
+        <Label>Start date (YYYY-MM-DD)</Label>
+        <Field value={startDate} onChangeText={setStartDate} autoCapitalize="none" placeholder="2026-09-18" />
+        <Label>End date (YYYY-MM-DD)</Label>
+        <Field value={endDate} onChangeText={setEndDate} autoCapitalize="none" placeholder="2026-10-18" />
         <Label>Time from (HH:MM)</Label>
-        <Field
-          value={timeFrom}
-          onChangeText={setTimeFrom}
-          placeholder="18:00"
-          autoCapitalize="none"
-        />
+        <Field value={timeFrom} onChangeText={setTimeFrom} placeholder="18:00" autoCapitalize="none" />
         <Label>Time to (HH:MM)</Label>
-        <Field
-          value={timeTo}
-          onChangeText={setTimeTo}
-          placeholder="19:00"
-          autoCapitalize="none"
-        />
+        <Field value={timeTo} onChangeText={setTimeTo} placeholder="19:00" autoCapitalize="none" />
         <Muted>Saved as {timingLabel}</Muted>
         <Label>Amount</Label>
         <Field keyboardType="decimal-pad" value={amount} onChangeText={(v) => setAmount(sanitizeAmountInput(v))} />
@@ -154,7 +157,10 @@ export function MembershipScreen({
         {entries.slice(0, 20).map((entry) => (
           <View key={entry.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }}>
             <Text style={{ fontWeight: "700" }}>{entry.customer_name} · #{entry.bill_number}</Text>
-            <Muted>{entry.timing} · ₹{Number(entry.amount).toFixed(0)}</Muted>
+            <Muted>
+              {entry.start_date || "—"} → {entry.end_date || "—"} · {entry.timing} · ₹{Number(entry.amount).toFixed(0)}
+            </Muted>
+            {entry.customer_mobile ? <Muted>+91 {entry.customer_mobile}</Muted> : null}
           </View>
         ))}
       </Card>
