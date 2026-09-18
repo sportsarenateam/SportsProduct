@@ -41,22 +41,35 @@ const cashfreeConfig = {
 };
 const payMode = cashfreeModeLabel(cashfreeEnv);
 const app = express();
-const allowedOrigins = (env.APP_URL ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
+const allowedOrigins = (env.APP_URL ?? "")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
 const appOrigin = allowedOrigins[0] || "http://localhost:5173";
+const productionWebOrigins = [
+  "https://sportsarena.team",
+  "https://www.sportsarena.team",
+];
+function isAllowedOrigin(origin?: string | null) {
+  if (!origin) return true;
+  const normalized = origin.replace(/\/$/, "");
+  if (allowedOrigins.includes(normalized)) return true;
+  if (productionWebOrigins.includes(normalized)) return true;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/i.test(normalized)) return true;
+  if (/\.(loca\.lt|ngrok-free\.app|ngrok\.io|exp\.direct|trycloudflare\.com|vercel\.app)$/i.test(normalized)) return true;
+  if (/^https?:\/\/.*\.(loca\.lt|trycloudflare\.com|vercel\.app)$/i.test(normalized)) return true;
+  return false;
+}
 app.use(cors({
   origin(origin, callback) {
     // Allow local web + LAN / tunnel mobile testing without throwing (throws crashed the API).
-    if (
-      !origin
-      || allowedOrigins.includes(origin)
-      || /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/i.test(origin)
-      || /\.(loca\.lt|ngrok-free\.app|ngrok\.io|exp\.direct|trycloudflare\.com)$/i.test(origin)
-      || /^https?:\/\/.*\.(loca\.lt|trycloudflare\.com)$/i.test(origin)
-    ) {
-      return callback(null, true);
-    }
+    if (isAllowedOrigin(origin)) return callback(null, true);
+    console.warn("CORS blocked origin:", origin);
     return callback(null, false);
   },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Organization-Id"],
+  optionsSuccessStatus: 204,
 }));
 
 process.on("unhandledRejection", (reason) => {
