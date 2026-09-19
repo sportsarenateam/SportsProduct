@@ -20,6 +20,7 @@ import skatingIcon from "./assets/skating.png";
 import volleyballIcon from "./assets/volleyball.png";
 import { WorkspaceApp } from "./workspace/WorkspaceApp";
 import type { AppRole, WorkspacePage } from "./workspace/types";
+import { assertPasswordStrength, PASSWORD_HINT } from "./workspace/opsHelpers";
 import { ThemeToggle } from "./components/ThemeToggle";
 
 type Arena = {
@@ -41,17 +42,19 @@ function userNeedsPasswordSetup(user: User | null | undefined) {
 }
 
 async function saveAccountPassword(password: string) {
+  assertPasswordStrength(password);
   const { error } = await supabase!.auth.updateUser({
     password,
     data: { password_set: true },
   });
-  // If they re-enter the same password, still mark setup complete and continue.
-  if (error && !/same.?password|different from the old/i.test(error.message)) {
-    throw new Error(error.message);
-  }
   if (error) {
-    const { error: metaError } = await supabase!.auth.updateUser({ data: { password_set: true } });
-    if (metaError) throw new Error(metaError.message);
+    if (/same.?password|different from the old/i.test(error.message)) {
+      throw new Error("New password must be different from your current password");
+    }
+    if (/422|weak|pwned|compromised|characters/i.test(error.message)) {
+      throw new Error(PASSWORD_HINT);
+    }
+    throw new Error(error.message);
   }
   const { data, error: sessionError } = await supabase!.auth.getSession();
   if (sessionError) throw new Error(sessionError.message);
@@ -832,6 +835,7 @@ function AuthForm({
       });
       const registerBody = await registerResponse.json() as {
         error?: string;
+        needsEmailConfirmation?: boolean;
         organization?: { id: string; name: string };
         subscription?: { trialEndsAt: string | null; status: string };
       };
@@ -840,6 +844,13 @@ function AuthForm({
           throw new Error(registerBody.error ?? "This email is already registered. Please log in instead.");
         }
         throw new Error(registerBody.error ?? "Unable to create account");
+      }
+
+      // Password accounts require inbox confirmation (Resend via Supabase SMTP).
+      if (registerBody.needsEmailConfirmation) {
+        setMessage("Account created. Check your email to confirm, then log in with your password (or use Email OTP).");
+        setMode("login");
+        return;
       }
 
       const login = await supabase!.auth.signInWithPassword({ email, password });
@@ -1169,9 +1180,7 @@ function SetPasswordOnboarding({ onDone }: { onDone: (session: Session) => void 
     setBusy(true);
     setMessage("");
     try {
-      if (password.length < 8) throw new Error("Password must be at least 8 characters");
-      if (password.length > 72) throw new Error("Password must be 72 characters or fewer");
-      if (password !== confirmPassword) throw new Error("Password and confirm password must match");
+      assertPasswordStrength(password, confirmPassword);
       const session = await saveAccountPassword(password);
       onDone(session);
     } catch (error) {
@@ -1188,6 +1197,7 @@ function SetPasswordOnboarding({ onDone }: { onDone: (session: Session) => void 
         <img className="auth-brand" src={sportzArenaLogo} alt="" />
         <h1>Create your password</h1>
         <p>Email verified. Set a password so you can log in next time without waiting for OTP.</p>
+        <p className="ops-muted">{PASSWORD_HINT}</p>
         <form onSubmit={submit}>
           <PasswordInput
             label="Password"
@@ -1195,7 +1205,7 @@ function SetPasswordOnboarding({ onDone }: { onDone: (session: Session) => void 
             onChange={setPassword}
             autoComplete="new-password"
             autoFocus
-            placeholder="At least 8 characters"
+            placeholder="Strong password"
           />
           <PasswordInput
             label="Confirm password"
@@ -1344,7 +1354,7 @@ function ResetPassword() {
         <h1>Choose a new password</h1>
         <p>
           {ready
-            ? "Enter a new password and confirm it."
+            ? "Enter a new password (forgot password does not need your old password — OTP already verified you)."
             : "Verify your reset OTP first, then set a new password."}
         </p>
         {ready ? (
@@ -1354,8 +1364,7 @@ function ResetPassword() {
               setBusy(true);
               setMessage("");
               try {
-                if (password.length < 8) throw new Error("Password must be at least 8 characters");
-                if (password !== confirmPassword) throw new Error("Password and confirm password must match");
+                assertPasswordStrength(password, confirmPassword);
                 await saveAccountPassword(password);
                 sessionStorage.removeItem("sportzarena-reset-email");
                 await supabase!.auth.signOut();
@@ -1368,6 +1377,7 @@ function ResetPassword() {
               }
             }}
           >
+            <p className="ops-muted">{PASSWORD_HINT}</p>
             <PasswordInput label="New password" value={password} onChange={setPassword} autoComplete="new-password" autoFocus />
             <PasswordInput label="Confirm password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" />
             <button className="primary" disabled={busy}>{busy ? "Saving…" : "Update password"}</button>

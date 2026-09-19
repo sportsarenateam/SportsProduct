@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { assertPasswordStrength, PASSWORD_HINT } from "../lib/opsHelpers";
 import {
   Card,
   ErrorText,
@@ -19,49 +20,40 @@ export function SetPasswordScreen({ onDone }: { onDone: (session: Session) => vo
   const [error, setError] = useState("");
 
   async function save() {
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (password !== confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
     setBusy(true);
     setError("");
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-      data: { password_set: true },
-    });
-    if (updateError && !/same.?password|different from the old/i.test(updateError.message)) {
-      setBusy(false);
-      setError(updateError.message);
-      return;
-    }
-    if (updateError) {
-      const { error: metaError } = await supabase.auth.updateUser({ data: { password_set: true } });
-      if (metaError) {
-        setBusy(false);
-        setError(metaError.message);
-        return;
+    try {
+      assertPasswordStrength(password, confirm);
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+        data: { password_set: true },
+      });
+      if (updateError) {
+        if (/same.?password|different from the old/i.test(updateError.message)) {
+          throw new Error("New password must be different from your current password");
+        }
+        throw new Error(updateError.message);
       }
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !data.session) {
+        throw new Error(sessionError?.message ?? "Session expired. Sign in again.");
+      }
+      onDone(data.session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save password");
+    } finally {
+      setBusy(false);
     }
-    const { data, error: sessionError } = await supabase.auth.getSession();
-    setBusy(false);
-    if (sessionError || !data.session) {
-      setError(sessionError?.message ?? "Session expired. Sign in again.");
-      return;
-    }
-    onDone(data.session);
   }
 
   return (
     <Screen>
       <Title>Create password</Title>
       <Muted>Set a password so you can sign in on this phone without waiting for OTP next time.</Muted>
+      <Muted>{PASSWORD_HINT}</Muted>
       <Card>
         <Label>New password</Label>
-        <Field secureTextEntry value={password} onChangeText={setPassword} placeholder="At least 8 characters" />
+        <Field secureTextEntry value={password} onChangeText={setPassword} placeholder="Strong password" />
         <Label>Confirm password</Label>
         <Field secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
         <ErrorText>{error}</ErrorText>

@@ -55,11 +55,13 @@ export function registerOpsRoutes(
   db: SupabaseClient,
   authenticate: Middleware,
   membership: Middleware,
-  _requireEntitlement?: Middleware,
+  requireEntitlement?: Middleware,
 ) {
   const json = express.json();
-  // Entitlement soft-gated on frontend during testing; keep ops available for feature QA.
-  const withOrg = [authenticate as never, membership as never];
+  // JWT + org membership + active trial/subscription required for ops writes/reads.
+  const withOrg: Middleware[] = requireEntitlement
+    ? [authenticate, membership, requireEntitlement]
+    : [authenticate, membership];
 
   app.get("/ops/bootstrap", ...withOrg, async (req: AuthedRequest, res) => {
     try {

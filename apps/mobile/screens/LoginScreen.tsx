@@ -32,9 +32,11 @@ function friendlyNetworkError(err: unknown, fallback: string) {
 export function LoginScreen({
   onSession,
   onBack,
+  onForgotPassword,
 }: {
   onSession: (session: Session) => void;
   onBack?: () => void;
+  onForgotPassword?: () => void;
 }) {
   const [tab, setTab] = useState<"otp" | "password">("otp");
   const [email, setEmail] = useState("");
@@ -207,6 +209,7 @@ export function LoginScreen({
               onChangeText={setPassword}
               editable={!busy}
             />
+            <LinkButton label="Forgot password?" onPress={() => onForgotPassword?.()} />
           </>
         ) : null}
 

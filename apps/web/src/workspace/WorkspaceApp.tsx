@@ -13,7 +13,10 @@ import {
   sanitizeAmountInput,
   sanitizeMobileInput,
   upsertCartItem,
+  assertPasswordStrength,
+  PASSWORD_HINT,
 } from "./opsHelpers";
+import { supabase } from "../lib/supabase";
 
 type Arena = {
   id: string;
@@ -2255,6 +2258,13 @@ function ProfilePanel({
     active: boolean;
   }>>([]);
 
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdError, setPwdError] = useState("");
+  const [pwdSaved, setPwdSaved] = useState(false);
+
   useEffect(() => {
     opsRequest<{ profile: { name: string; address: string; pincode: string; contactPhone: string } }>(session, arena.id, "/ops/profile")
       .then(({ profile }) => {
@@ -2276,6 +2286,43 @@ function ProfilePanel({
     loadStaff().catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.access_token, arena.id, isOwner]);
+
+  async function changePassword(event: FormEvent) {
+    event.preventDefault();
+    setPwdBusy(true);
+    setPwdError("");
+    setPwdSaved(false);
+    try {
+      if (!oldPassword) throw new Error("Enter your current password");
+      assertPasswordStrength(newPassword, confirmNewPassword);
+      if (oldPassword === newPassword) {
+        throw new Error("New password must be different from your current password");
+      }
+      const email = session.user.email;
+      if (!email) throw new Error("No email on this account");
+      if (!supabase) throw new Error("Auth is not configured");
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: oldPassword,
+      });
+      if (verifyError) throw new Error("Current password is incorrect");
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        if (/same.?password|different from the old/i.test(error.message)) {
+          throw new Error("New password must be different from your current password");
+        }
+        throw new Error(error.message);
+      }
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setPwdSaved(true);
+    } catch (err) {
+      setPwdError(err instanceof Error ? err.message : "Unable to change password");
+    } finally {
+      setPwdBusy(false);
+    }
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -2373,6 +2420,32 @@ function ProfilePanel({
         {saved && <p className="ops-muted">Profile saved.</p>}
         {isOwner && <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save profile"}</button>}
       </form>
+
+      <section className="ops-card" style={{ marginTop: 16 }}>
+        <h3>Change password</h3>
+        <p className="ops-muted">
+          Use this when you still know your current password. If you forgot it, use Forgot password on the login page (OTP).
+        </p>
+        <p className="ops-muted">{PASSWORD_HINT}</p>
+        <form onSubmit={changePassword} className="ops-grid-3" style={{ marginTop: 12 }}>
+          <label>Current password
+            <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} autoComplete="current-password" required />
+          </label>
+          <label>New password
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" required />
+          </label>
+          <label>Confirm new password
+            <input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} autoComplete="new-password" required />
+          </label>
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <button className="primary" type="submit" disabled={pwdBusy}>
+              {pwdBusy ? "Updating…" : "Update password"}
+            </button>
+          </div>
+        </form>
+        {pwdError && <p className="workspace-notice">{pwdError}</p>}
+        {pwdSaved && <p className="ops-muted">Password updated.</p>}
+      </section>
 
       {isOwner && (
         <section className="ops-card" style={{ marginTop: 16 }}>

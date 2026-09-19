@@ -26,6 +26,8 @@ const env = z.object({
   CASHFREE_APP_ID: z.string().min(1),
   CASHFREE_SECRET_KEY: z.string().min(1),
   CASHFREE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  /** Cashfree webhook signing secret (Dashboard → Developers → Webhooks). */
+  CASHFREE_WEBHOOK_SECRET: z.string().optional(),
   /** Legacy Razorpay — optional while migrating subscription checkout to Cashfree. */
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
@@ -71,6 +73,24 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization", "X-Organization-Id"],
   optionsSuccessStatus: 204,
 }));
+
+/** Simple in-memory rate limit (per process) for public auth abuse. */
+const authHitMap = new Map<string, { count: number; resetAt: number }>();
+function allowAuthAttempt(bucket: string, limit = 20, windowMs = 60_000) {
+  const now = Date.now();
+  const row = authHitMap.get(bucket);
+  if (!row || now >= row.resetAt) {
+    authHitMap.set(bucket, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (row.count >= limit) return false;
+  row.count += 1;
+  return true;
+}
+function clientIp(req: Request) {
+  const forwarded = req.header("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || req.ip || "unknown";
+}
 
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled rejection:", reason);
@@ -275,20 +295,16 @@ async function saveOwnerOnboardingSports(actorId: string, sportNames: string[]) 
 /** Public: does this email already have an Auth account? */
 app.post("/auth/email-status", express.json(), async (req, res) => {
   try {
+    if (!allowAuthAttempt(`email-status:${clientIp(req)}`, 30, 60_000)) {
+      return res.status(429).json({ error: "Too many attempts. Wait a minute and try again." });
+    }
     const email = z.string().trim().email().max(254).parse(req.body?.email).toLowerCase();
     const user = await findAuthUserByEmail(email);
-    if (!user) return res.json({ exists: false, hasArena: false, hasPassword: false });
-
-    const { data: membership } = await db.from("organization_memberships")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .eq("active", true)
-      .limit(1)
-      .maybeSingle();
+    // Avoid leaking arena/password details to anonymous callers.
+    if (!user) return res.json({ exists: false });
 
     return res.json({
       exists: true,
-      hasArena: Boolean(membership?.organization_id),
       hasPassword: user.user_metadata?.password_set === true,
     });
   } catch (error) {
@@ -297,9 +313,12 @@ app.post("/auth/email-status", express.json(), async (req, res) => {
   }
 });
 
-/** Creates auth user + profile + arena in one step (avoids browser signup email rate limits). */
+/** Creates auth user + profile + arena. Email must be confirmed before password login. */
 app.post("/auth/register", express.json(), async (req, res) => {
   try {
+    if (!allowAuthAttempt(`register:${clientIp(req)}`, 8, 60_000)) {
+      return res.status(429).json({ error: "Too many signup attempts. Wait a minute and try again." });
+    }
     const input = z.object({
       arenaName: z.string().trim().min(2).max(120),
       email: z.string().trim().email().max(254),
@@ -316,10 +335,11 @@ app.post("/auth/register", express.json(), async (req, res) => {
       });
     }
 
+    // Never auto-confirm — attacker must not own arbitrary emails without inbox proof.
     const { data: created, error: createError } = await db.auth.admin.createUser({
       email,
       password: input.password,
-      email_confirm: true,
+      email_confirm: false,
       user_metadata: { full_name: input.arenaName, arena_name: input.arenaName, password_set: true },
       app_metadata: { sportzarena_owner: true },
     });
@@ -352,14 +372,22 @@ app.post("/auth/register", express.json(), async (req, res) => {
     })();
 
     if (provisionError || !provisioned) {
-      // Do not leave a login-capable user without an arena.
+      // Do not leave an Auth user without an arena.
       await db.auth.admin.deleteUser(created.user.id);
       return res.status(500).json({ error: provisionError?.message ?? "Account created but arena setup failed. Please try again." });
     }
 
+    // Trigger Supabase confirmation email (via Resend SMTP) — password login blocked until confirmed.
+    await db.auth.admin.generateLink({
+      type: "signup",
+      email,
+      options: { redirectTo: `${appOrigin}/auth/callback` },
+    }).catch((err) => console.warn("Confirmation email generateLink failed:", err));
+
     return res.status(201).json({
       email,
       userId: created.user.id,
+      needsEmailConfirmation: true,
       organization: provisioned.organization,
       subscription: provisioned.subscription,
     });
@@ -696,33 +724,66 @@ app.post("/subscriptions/verify", express.json(), authenticate, membership, requ
   }
 });
 
-app.post("/webhooks/cashfree", express.json({ type: "*/*" }), async (req, res) => {
+app.post("/webhooks/cashfree", express.raw({ type: "*/*" }), async (req, res) => {
   try {
-    const payload = req.body as {
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body ?? ""), "utf8");
+    const webhookSecret = env.CASHFREE_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const timestamp = req.header("x-webhook-timestamp") ?? "";
+      const signature = req.header("x-webhook-signature") ?? "";
+      const expected = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(timestamp + rawBody.toString("utf8"))
+        .digest("base64");
+      const received = Buffer.from(signature);
+      const signed = Buffer.from(expected);
+      if (!timestamp || received.length !== signed.length || !crypto.timingSafeEqual(received, signed)) {
+        return res.sendStatus(400);
+      }
+    } else if (env.CASHFREE_ENV === "production") {
+      console.error("CASHFREE_WEBHOOK_SECRET is required in production");
+      return res.sendStatus(500);
+    }
+
+    const payload = JSON.parse(rawBody.toString("utf8")) as {
       type?: string;
       data?: {
-        order?: { order_id?: string; order_tags?: { organization_id?: string } };
+        order?: { order_id?: string };
         payment?: { payment_status?: string };
       };
     };
-    const orderId = payload.data?.order?.order_id;
+    const orderId = String(payload.data?.order?.order_id ?? "").trim();
     const paymentStatus = String(payload.data?.payment?.payment_status ?? "").toUpperCase();
     const eventType = String(payload.type ?? "").toUpperCase();
-    const success = paymentStatus === "SUCCESS"
+    const successHint = paymentStatus === "SUCCESS"
       || eventType.includes("SUCCESS")
       || eventType.includes("PAID");
-    if (!orderId || !success) return res.sendStatus(200);
+    if (!orderId || !successHint) return res.sendStatus(200);
+    if (!/^[A-Za-z0-9_-]{6,128}$/.test(orderId)) return res.sendStatus(200);
+
+    // Never trust webhook body alone — confirm payment with Cashfree API.
+    const order = await getCashfreeOrder(cashfreeConfig, orderId);
+    const orderPaid = ["PAID", "SUCCESS"].includes(String(order.order_status ?? "").toUpperCase());
+    if (!orderPaid) {
+      const payments = await getCashfreePayments(cashfreeConfig, orderId).catch(() => []);
+      const paymentOk = payments.some((p) => ["SUCCESS", "PAID"].includes(String(p.payment_status ?? "").toUpperCase()));
+      if (!paymentOk) return res.sendStatus(200);
+    }
 
     const periodEnd = new Date();
     periodEnd.setDate(periodEnd.getDate() + 30);
-    const orgFromTag = payload.data?.order?.order_tags?.organization_id;
-    let query = db.from("arena_subscriptions").update({
+    // Activate only by known order id — never by attacker-controlled organization_id tags.
+    const { error } = await db.from("arena_subscriptions").update({
       status: "active",
       current_period_ends_at: periodEnd.toISOString(),
-    });
-    if (orgFromTag) query = query.eq("organization_id", orgFromTag);
-    else query = query.or(`cashfree_order_id.eq.${orderId},razorpay_subscription_id.eq.${orderId}`);
-    await query;
+      cashfree_order_id: orderId,
+    }).eq("cashfree_order_id", orderId);
+    if (error && /cashfree_order_id/i.test(error.message)) {
+      await db.from("arena_subscriptions").update({
+        status: "active",
+        current_period_ends_at: periodEnd.toISOString(),
+      }).eq("razorpay_subscription_id", orderId);
+    }
     res.sendStatus(200);
   } catch (error) {
     console.error("Cashfree webhook error:", error);

@@ -9,6 +9,7 @@ import { Screen, Card, Muted, PrimaryButton, LinkButton, Title, Field, Label, co
 import { LoginScreen } from "./screens/LoginScreen";
 import { LandingScreen } from "./screens/LandingScreen";
 import { SetPasswordScreen } from "./screens/SetPasswordScreen";
+import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { BookingScreen } from "./screens/BookingScreen";
 import { CoachingScreen } from "./screens/CoachingScreen";
@@ -89,7 +90,7 @@ function AppBody() {
   const [authError, setAuthError] = useState("");
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [bootKey, setBootKey] = useState(0);
-  const [authGate, setAuthGate] = useState<"landing" | "login">("landing");
+  const [authGate, setAuthGate] = useState<"landing" | "login" | "forgot">("landing");
   const [apiUrlDraft, setApiUrlDraft] = useState(getApiUrl());
   const [apiReady, setApiReady] = useState(false);
 
@@ -271,10 +272,14 @@ function AppBody() {
     if (authGate === "landing") {
       return <LandingScreen onSignIn={() => setAuthGate("login")} />;
     }
+    if (authGate === "forgot") {
+      return <ForgotPasswordScreen onBack={() => setAuthGate("login")} />;
+    }
     return (
       <LoginScreen
         onSession={setSession}
         onBack={() => setAuthGate("landing")}
+        onForgotPassword={() => setAuthGate("forgot")}
       />
     );
   }

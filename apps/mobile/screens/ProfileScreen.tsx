@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { opsRequest } from "../lib/api";
-import { isValidMobile, mobileDigits, sanitizeMobileInput } from "../lib/opsHelpers";
+import { assertPasswordStrength, isValidMobile, mobileDigits, PASSWORD_HINT, sanitizeMobileInput } from "../lib/opsHelpers";
 import type { AppRole, Arena } from "../lib/types";
+import { supabase } from "../lib/supabase";
 import {
   BackHeader,
   Card,
@@ -52,6 +53,13 @@ export function ProfileScreen({
   const [staffMessage, setStaffMessage] = useState("");
   const [staffList, setStaffList] = useState<StaffRow[]>([]);
 
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdError, setPwdError] = useState("");
+  const [pwdSaved, setPwdSaved] = useState(false);
+
   useEffect(() => {
     opsRequest<{ profile: { name: string; address: string; pincode: string; contactPhone: string } }>(
       session,
@@ -76,6 +84,41 @@ export function ProfileScreen({
   useEffect(() => {
     loadStaff().catch(() => undefined);
   }, [session.access_token, arena.id, isOwner]);
+
+  async function changePassword() {
+    setPwdBusy(true);
+    setPwdError("");
+    setPwdSaved(false);
+    try {
+      if (!oldPassword) throw new Error("Enter your current password");
+      assertPasswordStrength(newPassword, confirmNewPassword);
+      if (oldPassword === newPassword) {
+        throw new Error("New password must be different from your current password");
+      }
+      const email = session.user.email;
+      if (!email) throw new Error("No email on this account");
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: oldPassword,
+      });
+      if (verifyError) throw new Error("Current password is incorrect");
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        if (/same.?password|different from the old/i.test(error.message)) {
+          throw new Error("New password must be different from your current password");
+        }
+        throw new Error(error.message);
+      }
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setPwdSaved(true);
+    } catch (err) {
+      setPwdError(err instanceof Error ? err.message : "Unable to change password");
+    } finally {
+      setPwdBusy(false);
+    }
+  }
 
   async function save() {
     if (!isOwner) return;
@@ -172,6 +215,23 @@ export function ProfileScreen({
         <ErrorText>{error}</ErrorText>
         {saved ? <Muted>Profile saved.</Muted> : null}
         {isOwner ? <PrimaryButton label="Save profile" busy={busy} onPress={save} /> : null}
+      </Card>
+
+      <Card>
+        <Text style={{ fontWeight: "700", color: "#082b55", fontSize: 16 }}>Change password</Text>
+        <Muted>
+          Use current password when you still remember it. If you forgot it, use Forgot password on login (OTP).
+        </Muted>
+        <Muted>{PASSWORD_HINT}</Muted>
+        <Label>Current password</Label>
+        <Field secureTextEntry value={oldPassword} onChangeText={setOldPassword} placeholder="Current password" />
+        <Label>New password</Label>
+        <Field secureTextEntry value={newPassword} onChangeText={setNewPassword} placeholder="New password" />
+        <Label>Confirm new password</Label>
+        <Field secureTextEntry value={confirmNewPassword} onChangeText={setConfirmNewPassword} placeholder="Confirm new password" />
+        <ErrorText>{pwdError}</ErrorText>
+        {pwdSaved ? <Muted>Password updated.</Muted> : null}
+        <PrimaryButton label="Update password" busy={pwdBusy} onPress={changePassword} />
       </Card>
 
       {isOwner ? (

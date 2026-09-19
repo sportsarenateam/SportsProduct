@@ -146,3 +146,19 @@ export function buildMultiSectionCsv(
     return lines.join("\n");
   }).join("\n\n");
 }
+
+export const PASSWORD_HINT =
+  "Min 8 characters, with at least 1 letter, 1 number, and 1 special character (!@#$…).";
+
+export function assertPasswordStrength(password: string, confirm?: string) {
+  if (password.length < 8) throw new Error("Password must be at least 8 characters");
+  if (password.length > 72) throw new Error("Password must be 72 characters or fewer");
+  if (!/[A-Za-z]/.test(password)) throw new Error("Password must include at least one letter");
+  if (!/\d/.test(password)) throw new Error("Password must include at least one number");
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    throw new Error("Password must include at least one special character (e.g. !@#$%)");
+  }
+  if (confirm !== undefined && password !== confirm) {
+    throw new Error("Password and confirm password must match");
+  }
+}
