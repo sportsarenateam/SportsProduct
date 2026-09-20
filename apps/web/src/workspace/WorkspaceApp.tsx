@@ -1662,7 +1662,7 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
                         : row.grand_total,
                     ).toFixed(0)}
                   </td>
-                  <td><button type="button" className="link" onClick={() => removeBooking(row.id)}>Delete</button></td>
+                  <td><DeleteButton onClick={() => removeBooking(row.id)} /></td>
                 </tr>
               ))}
             </tbody>
@@ -1683,7 +1683,7 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
                   <td>₹{Number(row.discount || 0).toFixed(0)}</td>
                   <td>₹{Number(row.advance || 0).toFixed(0)}</td>
                   <td>₹{coachingPaid(row).toFixed(0)}</td>
-                  <td><button type="button" className="link" onClick={() => removeCoaching(row.id)}>Delete</button></td>
+                  <td><DeleteButton onClick={() => removeCoaching(row.id)} /></td>
                 </tr>
               ))}
             </tbody>
@@ -1703,7 +1703,7 @@ function SalesPanel({ session, arenaId, onBack }: { session: Session; arenaId: s
                   <td>{row.start_date || "—"} → {row.end_date || "—"}</td>
                   <td>{row.timing || "—"}</td>
                   <td>₹{Number(row.amount).toFixed(0)}</td>
-                  <td><button type="button" className="link" onClick={() => removeMembership(row.id)}>Delete</button></td>
+                  <td><DeleteButton onClick={() => removeMembership(row.id)} /></td>
                 </tr>
               ))}
             </tbody>

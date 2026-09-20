@@ -2171,7 +2171,16 @@ button { cursor: pointer; }
   background: var(--sa-navy);
   border-bottom: 1px solid color-mix(in srgb, var(--sa-navy) 80%, #fff);
 }
-.app-shell .link { color: #fff; }
+.app-shell nav .link { color: #fff; }
+.ops-inline .link,
+.ops-table-wrap .link {
+  color: var(--link);
+  font-weight: 700;
+}
+.ops-inline .link:hover,
+.ops-table-wrap .link:hover {
+  color: var(--link-hover);
+}
 .dashboard { max-width: 1050px; margin: 0 auto; padding: 58px 28px; }
 .dashboard h1 { font-size: clamp(var(--title-md), 3.5vw, var(--title-xl)); margin: 8px 0 20px; }
 .trial-card {

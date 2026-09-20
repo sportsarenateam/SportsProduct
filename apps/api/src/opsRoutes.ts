@@ -332,6 +332,7 @@ export function registerOpsRoutes(
   });
 
   app.delete("/ops/coaching/:id", ...withOrg, async (req: AuthedRequest, res) => {
+    if (req.role !== "owner") return res.status(403).json({ error: "Only the owner can delete sales records" });
     const { error } = await db.from("coaching_registrations").delete().eq("id", req.params.id).eq("organization_id", req.organizationId!);
     if (error) return res.status(400).json({ error: error.message });
     res.json({ ok: true });
@@ -387,7 +388,7 @@ export function registerOpsRoutes(
   });
 
   app.delete("/ops/membership-billing/:id", ...withOrg, async (req: AuthedRequest, res) => {
-    if (req.role === "cashier") return res.status(403).json({ error: "Insufficient role" });
+    if (req.role !== "owner") return res.status(403).json({ error: "Only the owner can delete sales records" });
     const { error } = await db.from("membership_billing").delete().eq("id", req.params.id).eq("organization_id", req.organizationId!);
     if (error) return res.status(400).json({ error: error.message });
     res.json({ ok: true });
