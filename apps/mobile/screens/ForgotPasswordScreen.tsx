@@ -8,6 +8,7 @@ import {
   Label,
   LinkButton,
   Muted,
+  PasswordField,
   PrimaryButton,
   Screen,
   Title,
@@ -136,9 +137,9 @@ export function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
           <>
             <Muted>{PASSWORD_HINT}</Muted>
             <Label>New password</Label>
-            <Field secureTextEntry value={password} onChangeText={setPassword} placeholder="New password" />
+            <PasswordField value={password} onChangeText={setPassword} placeholder="New password" />
             <Label>Confirm new password</Label>
-            <Field secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
+            <PasswordField value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
             <PrimaryButton label="Update password" busy={busy} onPress={savePassword} />
           </>
         ) : null}

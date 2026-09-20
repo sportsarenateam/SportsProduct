@@ -3,7 +3,8 @@ import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native"
 import type { Session } from "@supabase/supabase-js";
 import { opsRequest } from "../lib/api";
 import { mobileDigits } from "../lib/opsHelpers";
-import { BackHeader, Card, ErrorText, Muted, Screen, colors } from "../components/ui";
+import { BackHeader, Card, DeleteIconButton, ErrorText, Muted, Screen } from "../components/ui";
+import { useTheme } from "../lib/theme";
 
 type ExpiringEntry = {
   id: string;
@@ -35,6 +36,7 @@ export function MembershipExpiringScreen({
   arenaPhone?: string;
   onBack: () => void;
 }) {
+  const { colors: themeColors } = useTheme();
   const [entries, setEntries] = useState<ExpiringEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -112,7 +114,7 @@ export function MembershipExpiringScreen({
       <BackHeader title="Membership expiring" onBack={onBack} />
       <Muted>Members ending today or tomorrow. Remind via WhatsApp; Delete after they renew.</Muted>
       <Pressable onPress={() => load().catch(() => undefined)}>
-        <Text style={styles.refresh}>Refresh</Text>
+        <Text style={[styles.refresh, { color: themeColors.navy }]}>Refresh</Text>
       </Pressable>
       {error ? <ErrorText>{error}</ErrorText> : null}
       {loading ? (
@@ -124,7 +126,7 @@ export function MembershipExpiringScreen({
       ) : (
         entries.map((entry) => (
           <Card key={entry.id}>
-            <Text style={styles.name}>{entry.customer_name}</Text>
+            <Text style={[styles.name, { color: themeColors.navy }]}>{entry.customer_name}</Text>
             <Muted>Ends {formatEndDate(entry.end_date)}</Muted>
             <Muted>+91 {entry.customer_mobile}</Muted>
             {entry.sport_name ? <Muted>{entry.sport_name}</Muted> : null}
@@ -132,9 +134,7 @@ export function MembershipExpiringScreen({
               <Pressable style={styles.remindBtn} onPress={() => remind(entry).catch(() => undefined)}>
                 <Text style={styles.remindLabel}>Remind</Text>
               </Pressable>
-              <Pressable style={styles.deleteBtn} onPress={() => confirmDelete(entry)}>
-                <Text style={styles.deleteLabel}>Delete</Text>
-              </Pressable>
+              <DeleteIconButton onPress={() => confirmDelete(entry)} />
             </View>
           </Card>
         ))
@@ -145,12 +145,10 @@ export function MembershipExpiringScreen({
 
 const styles = StyleSheet.create({
   refresh: {
-    color: colors.navy,
     fontWeight: "700",
     marginBottom: 8,
   },
   name: {
-    color: colors.navy,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -167,17 +165,6 @@ const styles = StyleSheet.create({
   },
   remindLabel: {
     color: "#fff",
-    fontWeight: "700",
-  },
-  deleteBtn: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.danger,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  deleteLabel: {
-    color: colors.danger,
     fontWeight: "700",
   },
 });

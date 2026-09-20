@@ -13,15 +13,16 @@ import {
   PrimaryButton,
   Screen,
   Title,
-  colors,
 } from "../components/ui";
+import { useTheme } from "../lib/theme";
 
 type CheckoutPayload = {
   orderId: string;
   paymentSessionId: string;
-  amount: number;
+  amountRupees?: number;
+  amount?: number;
   currency: string;
-  planName: string;
+  planName?: string;
   mode?: "test" | "live";
   env?: "sandbox" | "production";
 };
@@ -39,21 +40,28 @@ export function SubscriptionScreen({
   onActivated: (next: Partial<Arena>) => void;
   onDismiss?: () => void;
 }) {
+  const { colors: themeColors } = useTheme();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [payMode, setPayMode] = useState<"test" | "live" | null>(null);
   const [checkoutHtml, setCheckoutHtml] = useState<string | null>(null);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const verifying = useRef(false);
 
   async function startCheckout() {
     setBusy(true);
     setError("");
+    setPendingOrderId(null);
     try {
       const checkout = await opsRequest<CheckoutPayload>(session, arena.id, "/subscriptions/checkout", {
         method: "POST",
         body: JSON.stringify({ planId: "basic" }),
       });
+      if (!checkout.orderId || !checkout.paymentSessionId) {
+        throw new Error("Checkout did not return a Cashfree order");
+      }
       if (checkout.mode) setPayMode(checkout.mode);
+      setPendingOrderId(checkout.orderId);
       setCheckoutHtml(buildCheckoutHtml(checkout));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start payment");
@@ -61,12 +69,53 @@ export function SubscriptionScreen({
     }
   }
 
+  async function verifyOrder(orderId: string, allowPending = true) {
+    if (verifying.current) return;
+    verifying.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const delays = allowPending ? [0, 2000, 4000, 6000] : [0];
+      let lastError = "Payment not completed yet";
+      for (const wait of delays) {
+        if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+        try {
+          const verified = await opsRequest<{ status: string; periodEndsAt?: string }>(
+            session,
+            arena.id,
+            "/subscriptions/verify",
+            {
+              method: "POST",
+              body: JSON.stringify({ orderId }),
+            },
+          );
+          setCheckoutHtml(null);
+          setPendingOrderId(null);
+          onActivated({
+            status: verified.status ?? "active",
+            current_period_ends_at: verified.periodEndsAt ?? null,
+          });
+          return;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Payment verify failed";
+          if (!/not completed|PENDING|ACTIVE|UNKNOWN|timed out/i.test(lastError)) {
+            throw err;
+          }
+        }
+      }
+      setCheckoutHtml(null);
+      setError(formatPaymentPendingMessage(lastError));
+    } catch (err) {
+      setCheckoutHtml(null);
+      setError(err instanceof Error ? err.message : "Payment verify failed");
+    } finally {
+      verifying.current = false;
+      setBusy(false);
+    }
+  }
+
   async function onWebMessage(raw: string) {
-    let payload: {
-      type: string;
-      orderId?: string;
-      description?: string;
-    };
+    let payload: { type: string; orderId?: string; description?: string };
     try {
       payload = JSON.parse(raw);
     } catch {
@@ -82,44 +131,41 @@ export function SubscriptionScreen({
       return;
     }
 
-    if (payload.type !== "success" || verifying.current || !payload.orderId) return;
-    verifying.current = true;
-    try {
-      const verified = await opsRequest<{ status: string; periodEndsAt?: string }>(
-        session,
-        arena.id,
-        "/subscriptions/verify",
-        {
-          method: "POST",
-          body: JSON.stringify({ orderId: payload.orderId }),
-        },
-      );
-      setCheckoutHtml(null);
-      onActivated({
-        status: verified.status ?? "active",
-        current_period_ends_at: verified.periodEndsAt ?? null,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Payment verify failed");
-      setCheckoutHtml(null);
-    } finally {
-      verifying.current = false;
-      setBusy(false);
+    // Cashfree often resolves when the sheet closes — not when money is captured.
+    if (payload.type === "checkout_closed" || payload.type === "success") {
+      const orderId = payload.orderId || pendingOrderId;
+      if (!orderId) {
+        setCheckoutHtml(null);
+        setBusy(false);
+        setError("Payment window closed. Start checkout again, or tap check status if you already paid.");
+        return;
+      }
+      await verifyOrder(orderId, true);
     }
   }
 
   if (checkoutHtml) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View style={{ padding: 16, paddingBottom: 8 }}>
-          <Muted>Opening Cashfree checkout…</Muted>
+      <View style={{ flex: 1, backgroundColor: themeColors.bg }}>
+        <View style={{ padding: 16, paddingBottom: 8, gap: 8 }}>
+          <Muted>Complete the Cashfree sandbox payment (test mode — no real money).</Muted>
+          <Muted>When you finish or close the sheet, we confirm with the server.</Muted>
+          <PrimaryButton
+            label="Close checkout"
+            onPress={() => {
+              setCheckoutHtml(null);
+              setBusy(false);
+            }}
+          />
         </View>
         <WebView
           originWhitelist={["*"]}
           source={{ html: checkoutHtml, baseUrl: "https://sdk.cashfree.com" }}
           javaScriptEnabled
           domStorageEnabled
-          onMessage={(event) => onWebMessage(event.nativeEvent.data)}
+          onMessage={(event) => {
+            void onWebMessage(event.nativeEvent.data);
+          }}
           style={{ flex: 1 }}
         />
       </View>
@@ -148,20 +194,36 @@ export function SubscriptionScreen({
             : `Access for ${arena.name} is paused. Pay ₹499/month to restore bookings and billing for your staff.`}
         </Muted>
         <Muted>Starter · ₹499/mo · UPI, card, or netbanking</Muted>
+        <Muted>
+          Current status: {arena.status}
+          {arena.status === "trialing"
+            ? " (trial — app works until trial ends; payment not required yet)"
+            : ""}
+          {arena.status === "active" ? " (marked paid / activated)" : ""}
+        </Muted>
         <ErrorText>{error}</ErrorText>
         <PrimaryButton
-          label={busy ? "Opening secure checkout…" : (
+          label={busy && !pendingOrderId ? "Opening secure checkout…" : (
             ["active", "authenticated"].includes(arena.status) && upgradingDuringTrial
               ? "Renew ₹499 securely"
               : "Pay ₹499 securely"
           )}
-          busy={busy}
+          busy={busy && !pendingOrderId}
           onPress={startCheckout}
         />
+        {pendingOrderId ? (
+          <PrimaryButton
+            label={busy ? "Checking Cashfree…" : "I finished payment — check status"}
+            busy={busy}
+            onPress={() => {
+              void verifyOrder(pendingOrderId, true);
+            }}
+          />
+        ) : null}
         <Muted>
           Secured by Cashfree
           {payMode === "test" ? " · Test mode (no real charge)" : payMode === "live" ? " · Live payments" : ""}
-          . After payment your arena unlocks immediately.
+          . Test keys do not auto-succeed — finish the Cashfree sandbox payment (test card / UPI).
         </Muted>
         {onDismiss ? (
           <LinkButton
@@ -173,9 +235,9 @@ export function SubscriptionScreen({
             onPress={onDismiss}
           />
         ) : null}
-        {!onDismiss ? (
+        {!onDismiss && busy ? (
           <View style={{ marginTop: 8 }}>
-            {busy ? <ActivityIndicator color={colors.green} /> : null}
+            <ActivityIndicator color={themeColors.green} />
           </View>
         ) : null}
       </Card>
@@ -207,13 +269,14 @@ function buildCheckoutHtml(checkout: CheckoutPayload) {
         var cashfree = Cashfree({ mode: '${mode}' });
         cashfree.checkout({
           paymentSessionId: '${safe(checkout.paymentSessionId)}',
-          redirectTarget: '_self'
+          redirectTarget: '_modal'
         }).then(function (result) {
           if (result && result.error) {
             post({ type: 'failed', description: result.error.message || 'Payment failed' });
             return;
           }
-          post({ type: 'success', orderId: '${safe(checkout.orderId)}' });
+          // Native side confirms with /subscriptions/verify — do not assume paid here.
+          post({ type: 'checkout_closed', orderId: '${safe(checkout.orderId)}' });
         }).catch(function (err) {
           post({ type: 'failed', description: (err && err.message) || 'Payment failed' });
         });
@@ -224,4 +287,24 @@ function buildCheckoutHtml(checkout: CheckoutPayload) {
   </script>
 </body>
 </html>`;
+}
+
+/** Keep Cashfree status visible, e.g. "Payment not completed yet (status: ACTIVE)". */
+function formatPaymentPendingMessage(raw: string) {
+  const text = String(raw || "").trim();
+  const statusMatch = text.match(/status:\s*([A-Za-z0-9_]+)/i);
+  const status = (statusMatch?.[1] || "UNKNOWN").toUpperCase();
+
+  const hint = status === "ACTIVE"
+    ? "ACTIVE = order created, payment not paid yet. Finish Cashfree checkout, then tap check status."
+    : status === "PENDING"
+      ? "PENDING = Cashfree is still processing. Wait, then tap check status."
+      : status === "EXPIRED"
+        ? "EXPIRED = checkout timed out. Start a new payment."
+        : status === "FAILED" || status === "CANCELLED"
+          ? "Payment did not succeed. Try again."
+          : "If Cashfree showed success, tap “I finished payment — check status”.";
+
+  // Always show this exact first line with the real Cashfree value.
+  return `Payment not completed yet (status: ${status})\n\n${hint}`;
 }

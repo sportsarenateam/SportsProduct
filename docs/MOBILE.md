@@ -1,8 +1,18 @@
-# SportzArena mobile (Owner + Staff)
+# SportzArena mobile
 
-Expo app in `apps/mobile` (**Expo SDK 54**, matches current Expo Go). Same Supabase Auth + `apps/api` routes as web. **Owner and Staff get full day-to-day parity with web** for Play Store / App Store builds.
+Expo SDK **57** app (`apps/mobile`) for Owner + Staff. Same Supabase Auth + live API as web. Payments use **Cashfree** (not Razorpay).
+
+## Attractiveness stack (2026)
+
+- React Navigation bottom tabs: **Home / Book / Sales / More** + native stack for ops screens
+- **Manrope** via `@expo-google-fonts/manrope`
+- Ionicons module tiles + selection haptics
+- EAS profiles in `eas.json` (`development` / `preview` / `production`)
+- Production builds freeze API to `https://api.sportsarena.team` and disable cleartext HTTP
 
 ## Feature parity
+
+
 
 | Area | Owner (mobile) | Staff (mobile) |
 |------|----------------|----------------|
@@ -27,21 +37,37 @@ Expo Go is for development. Play Store / App Store need an **EAS production buil
 Your root `.env` should be:
 
 ```env
-API_URL=http://192.168.1.9:4000
+API_URL=http://10.242.206.137:4000
 ```
 
+Use your **PC Wi‑Fi IPv4** (run `ipconfig` → Wi‑Fi → IPv4).  
 **Correct:** `http://` + LAN IP + **colon** + `4000`  
-**Wrong:** `http:192.168.1.9.4000` or `http://192.168.1.9.4000` (dot before port)
+**Wrong:** `http://127.0.0.1:4000` on a physical phone (that is the phone itself, not your PC)
 
 Then:
 
 1. PC and phone on the **same Wi‑Fi**. Turn **mobile data OFF** while testing.
 2. `npm run dev:api` running (`listening on 0.0.0.0:4000`).
-3. Restart Expo after any `.env` change: `npx expo start --tunnel -c`.
-4. On the phone, open Safari/Chrome to `http://192.168.1.9:4000/subscriptions/plans` — you should see JSON. If that fails, the app will time out too.
-5. Windows Firewall: allow **Node.js** inbound (already often present).
+3. Restart Expo after any `.env` change.
+4. On the phone Safari, open `http://<PC-IP>:4000/subscriptions/plans` — you should see JSON.
+5. Windows Firewall: allow **Node.js** inbound.
 
-Expo tunnel only delivers the JS bundle. The phone still calls your PC LAN IP for the API.
+### iPhone + Expo Go (QR not connecting)
+
+iPhone Camera often fails for Expo QR codes. Do this instead:
+
+1. Install **Expo Go** from the App Store.
+2. On PC: stop Metro, then run from `apps/mobile`:
+
+```bash
+npm run start:tunnel
+```
+
+3. Open **Expo Go** → **Scan QR code** (not the Camera app).
+4. Keep iPhone on the **same Wi‑Fi** as the PC (mobile data off).
+5. After `.env` API_URL change, fully reload Expo Go (shake → Reload).
+
+Tunnel delivers the JS bundle. The phone still needs to reach `API_URL` for login/data. If Safari cannot open `http://<PC-IP>:4000/subscriptions/plans`, use Option D (Cloudflare) below.
 
 ## First-time experience (Play Store / App Store)
 

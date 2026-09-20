@@ -16,6 +16,7 @@ import {
   PrimaryButton,
   Screen,
 } from "../components/ui";
+import { useTheme } from "../lib/theme";
 
 export function MenuScreen({
   session,
@@ -32,6 +33,7 @@ export function MenuScreen({
   onChanged: () => Promise<void>;
   onBack: () => void;
 }) {
+  const { colors: themeColors } = useTheme();
   const [tab, setTab] = useState<"INVENTORY" | "COURTS">("INVENTORY");
   const [localInv, setLocalInv] = useState(inventory);
   const [courtNames, setCourtNames] = useState<Record<string, string>>({});
@@ -228,7 +230,7 @@ export function MenuScreen({
 
       {tab === "COURTS" ? sports.map((sport) => (
         <Card key={sport.id}>
-          <Text style={{ fontWeight: "700", color: "#082b55" }}>{sport.name}</Text>
+          <Text style={{ fontWeight: "700", color: themeColors.navy }}>{sport.name}</Text>
           <Label>₹ per hour</Label>
           <Field
             keyboardType="decimal-pad"
@@ -252,7 +254,7 @@ export function MenuScreen({
                 paddingVertical: 6,
               }}
             >
-              <Text style={{ color: "#1e3348", fontWeight: "600" }}>{court.name}</Text>
+              <Text style={{ color: themeColors.text, fontWeight: "600" }}>{court.name}</Text>
               <LinkButton label="Remove" onPress={() => deleteCourt(court.id)} />
             </View>
           ))}

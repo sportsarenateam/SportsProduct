@@ -7,13 +7,16 @@ import {
   BackHeader,
   Card,
   Chip,
+  DeleteIconButton,
   ErrorText,
   Field,
   Label,
   Muted,
   Screen,
-  colors,
+  ThemeToggle,
 } from "../components/ui";
+import { useTheme } from "../lib/theme";
+import { PieChart } from "../components/PieChart";
 
 type Tab = "BOOKINGS" | "ITEMS" | "COACHING" | "MEMBERSHIP";
 
@@ -59,6 +62,7 @@ export function SalesScreen({
   arenaId: string;
   onBack: () => void;
 }) {
+  const { colors: themeColors } = useTheme();
   const [rows, setRows] = useState<any[]>([]);
   const [coaching, setCoaching] = useState<any[]>([]);
   const [membership, setMembership] = useState<any[]>([]);
@@ -243,74 +247,95 @@ export function SalesScreen({
       <BackHeader
         title="Sales Report"
         onBack={onBack}
-        right={<Text style={{ fontWeight: "800", color: colors.navy }}>{tab}: ₹{tabTotal.toFixed(0)}</Text>}
+        right={(
+          <View style={{ alignItems: "flex-end", gap: 6 }}>
+            <ThemeToggle />
+            <Text style={{ fontWeight: "800", color: themeColors.navy }}>{tab}: ₹{tabTotal.toFixed(0)}</Text>
+          </View>
+        )}
       />
 
       <Card>
         <Label>Statistics</Label>
         <View style={styles.statsRow}>
-          <Text style={styles.stat}>Cash ₹{paymentStats.cash.toFixed(0)}</Text>
-          <Text style={styles.stat}>Online ₹{paymentStats.online.toFixed(0)}</Text>
-          <Text style={styles.stat}>Split ₹{paymentStats.split.toFixed(0)}</Text>
+          <Text style={[styles.stat, { color: themeColors.navy }]}>Cash ₹{paymentStats.cash.toFixed(0)}</Text>
+          <Text style={[styles.stat, { color: themeColors.navy }]}>Online ₹{paymentStats.online.toFixed(0)}</Text>
+          <Text style={[styles.stat, { color: themeColors.navy }]}>Split ₹{paymentStats.split.toFixed(0)}</Text>
         </View>
       </Card>
 
       <View style={styles.kpiRow}>
-        <View style={styles.kpiBox}>
-          <Text style={styles.kpiLabel}>Bookings</Text>
-          <Text style={styles.kpi}>₹{bookingTotal.toFixed(0)}</Text>
+        <View style={[styles.kpiBox, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <Text style={[styles.kpiLabel, { color: themeColors.muted }]}>Bookings</Text>
+          <Text style={[styles.kpi, { color: themeColors.navy }]}>₹{bookingTotal.toFixed(0)}</Text>
           <Muted>{filteredBookings.length}</Muted>
         </View>
-        <View style={styles.kpiBox}>
-          <Text style={styles.kpiLabel}>Advance collected</Text>
-          <Text style={styles.kpi}>₹{periodAdvance.toFixed(0)}</Text>
+        <View style={[styles.kpiBox, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <Text style={[styles.kpiLabel, { color: themeColors.muted }]}>Advance collected</Text>
+          <Text style={[styles.kpi, { color: themeColors.navy }]}>₹{periodAdvance.toFixed(0)}</Text>
           <Muted>{month || "All time"}</Muted>
         </View>
       </View>
       <View style={styles.kpiRow}>
-        <View style={styles.kpiBox}>
-          <Text style={styles.kpiLabel}>Discount given</Text>
-          <Text style={styles.kpi}>₹{periodDiscount.toFixed(0)}</Text>
+        <View style={[styles.kpiBox, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <Text style={[styles.kpiLabel, { color: themeColors.muted }]}>Discount given</Text>
+          <Text style={[styles.kpi, { color: themeColors.navy }]}>₹{periodDiscount.toFixed(0)}</Text>
           <Muted>{month || "All time"}</Muted>
         </View>
-        <View style={styles.kpiBox}>
-          <Text style={styles.kpiLabel}>Membership</Text>
-          <Text style={styles.kpi}>₹{membershipTotal.toFixed(0)}</Text>
+        <View style={[styles.kpiBox, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <Text style={[styles.kpiLabel, { color: themeColors.muted }]}>Membership</Text>
+          <Text style={[styles.kpi, { color: themeColors.navy }]}>₹{membershipTotal.toFixed(0)}</Text>
           <Muted>{filteredMembership.length}</Muted>
         </View>
       </View>
       <View style={styles.kpiRow}>
-        <View style={styles.kpiBox}>
-          <Text style={styles.kpiLabel}>Coaching</Text>
-          <Text style={styles.kpi}>₹{coachingTotal.toFixed(0)}</Text>
+        <View style={[styles.kpiBox, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <Text style={[styles.kpiLabel, { color: themeColors.muted }]}>Coaching</Text>
+          <Text style={[styles.kpi, { color: themeColors.navy }]}>₹{coachingTotal.toFixed(0)}</Text>
           <Muted>{filteredCoaching.length}</Muted>
         </View>
-        <View style={styles.kpiBox}>
-          <Text style={styles.kpiLabel}>Beverages & Equipment</Text>
-          <Text style={styles.kpi}>₹{itemsTotal.toFixed(0)}</Text>
+        <View style={[styles.kpiBox, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <Text style={[styles.kpiLabel, { color: themeColors.muted }]}>Beverages & Equipment</Text>
+          <Text style={[styles.kpi, { color: themeColors.navy }]}>₹{itemsTotal.toFixed(0)}</Text>
           <Muted>{filteredItems.length}</Muted>
         </View>
       </View>
 
-      {sportBreakdown.length > 0 && (
-        <Card>
-          <Label>Revenue by sport</Label>
-          {sportBreakdown.map(([name, value]) => (
-            <View key={name} style={styles.row}>
-              <Text style={styles.rowTitle}>{name}</Text>
-              <Text style={styles.rowAmt}>₹{value.toFixed(0)}</Text>
-            </View>
-          ))}
-        </Card>
-      )}
+      <Card>
+        <PieChart
+          title="Revenue by module"
+          slices={[
+            { label: "Bookings", value: bookingTotal, color: "#3b82f6" },
+            { label: "Membership", value: membershipTotal, color: "#e11d48" },
+            { label: "Coaching", value: coachingTotal, color: "#0d9488" },
+            { label: "Items", value: itemsTotal, color: "#d97706" },
+          ]}
+        />
+      </Card>
+
+      <Card>
+        <PieChart
+          title="Revenue by sport"
+          slices={sportBreakdown.map(([name, value], index) => ({
+            label: name,
+            value,
+            color: ["#3b82f6", "#0d9488", "#e11d48", "#d97706", "#7c3aed", "#2563eb", "#059669"][index % 7],
+          }))}
+        />
+      </Card>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {(["BOOKINGS", "MEMBERSHIP", "COACHING", "ITEMS"] as const).map((name) => (
+        {([
+          ["BOOKINGS", "Bookings"],
+          ["MEMBERSHIP", "Membership"],
+          ["COACHING", "Coaching"],
+          ["ITEMS", "Beverages"],
+        ] as const).map(([id, label]) => (
           <Chip
-            key={name}
-            label={name === "ITEMS" ? "BEVERAGES" : name}
-            active={tab === name}
-            onPress={() => setTab(name)}
+            key={id}
+            label={label}
+            active={tab === id}
+            onPress={() => setTab(id)}
           />
         ))}
       </View>
@@ -325,7 +350,7 @@ export function SalesScreen({
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <Chip label="All months" active={!month} onPress={() => setMonth("")} />
         <Pressable onPress={() => { exportReport().catch(() => undefined); }}>
-          <Text style={{ color: colors.navy, fontWeight: "800" }}>Share Excel CSV</Text>
+          <Text style={{ color: themeColors.navy, fontWeight: "800" }}>Share CSV</Text>
         </Pressable>
       </View>
 
@@ -335,70 +360,62 @@ export function SalesScreen({
 
       {tab === "BOOKINGS" && filteredBookings.map((row) => (
         <Card key={row.id}>
-          <Text style={styles.rowTitle}>#{row.bill_number} · {row.customer_name}</Text>
+          <Text style={[styles.rowTitle, { color: themeColors.navy }]}>#{row.bill_number} · {row.customer_name}</Text>
           <Muted>{row.sport_name || "—"} · {row.customer_mobile || "—"}</Muted>
-          <Text style={styles.rowAmt}>
+          <Text style={[styles.rowAmt, { color: themeColors.navy }]}>
             ₹{Number(row.grand_total || 0).toFixed(0)} · {row.payment_mode}
             {Number(row.discount || 0) > 0 ? ` · disc ₹${Number(row.discount).toFixed(0)}` : ""}{Number(row.advance || 0) > 0 ? ` · adv ₹${Number(row.advance).toFixed(0)}` : ""}
           </Text>
-          <Pressable onPress={() => confirmDelete("booking bill", async () => {
+          <DeleteIconButton onPress={() => confirmDelete("booking bill", async () => {
             await opsRequest(session, arenaId, `/ops/transactions/${row.id}`, { method: "DELETE" });
             await load();
-          })}>
-            <Text style={styles.delete}>Delete</Text>
-          </Pressable>
+          })} />
         </Card>
       ))}
 
       {tab === "ITEMS" && filteredItems.map((row) => (
         <Card key={row.id}>
-          <Text style={styles.rowTitle}>#{row.bill_number} · {row.customer_name}</Text>
+          <Text style={[styles.rowTitle, { color: themeColors.navy }]}>#{row.bill_number} · {row.customer_name}</Text>
           <Muted>
             {isItemsOnly(row)
               ? "Beverages & Equipment"
               : `With ${row.sport_name || "sport"}`}
           </Muted>
-          <Text style={styles.rowAmt}>
+          <Text style={[styles.rowAmt, { color: themeColors.navy }]}>
             ₹{Number(row.items_total || 0).toFixed(0)} · {row.payment_mode}
             {Number(row.discount || 0) > 0 ? ` · disc ₹${Number(row.discount).toFixed(0)}` : ""}{Number(row.advance || 0) > 0 ? ` · adv ₹${Number(row.advance).toFixed(0)}` : ""}
           </Text>
-          <Pressable onPress={() => confirmDelete("item bill", async () => {
+          <DeleteIconButton onPress={() => confirmDelete("item bill", async () => {
             await opsRequest(session, arenaId, `/ops/transactions/${row.id}`, { method: "DELETE" });
             await load();
-          })}>
-            <Text style={styles.delete}>Delete</Text>
-          </Pressable>
+          })} />
         </Card>
       ))}
 
       {tab === "COACHING" && filteredCoaching.map((row) => (
         <Card key={row.id}>
-          <Text style={styles.rowTitle}>#{row.bill_number ?? "—"} · {row.child_name}</Text>
+          <Text style={[styles.rowTitle, { color: themeColors.navy }]}>#{row.bill_number ?? "—"} · {row.child_name}</Text>
           <Muted>{row.parent_name} · {row.mobile_number}</Muted>
-          <Text style={styles.rowAmt}>
+          <Text style={[styles.rowAmt, { color: themeColors.navy }]}>
             ₹{coachingPaid(row).toFixed(0)}
             {Number(row.discount || 0) > 0 ? ` · disc ₹${Number(row.discount).toFixed(0)}` : ""}{Number(row.advance || 0) > 0 ? ` · adv ₹${Number(row.advance).toFixed(0)}` : ""}
           </Text>
-          <Pressable onPress={() => confirmDelete("coaching entry", async () => {
+          <DeleteIconButton onPress={() => confirmDelete("coaching entry", async () => {
             await opsRequest(session, arenaId, `/ops/coaching/${row.id}`, { method: "DELETE" });
             await load();
-          })}>
-            <Text style={styles.delete}>Delete</Text>
-          </Pressable>
+          })} />
         </Card>
       ))}
 
       {tab === "MEMBERSHIP" && filteredMembership.map((row) => (
         <Card key={row.id}>
-          <Text style={styles.rowTitle}>#{row.bill_number} · {row.customer_name}</Text>
+          <Text style={[styles.rowTitle, { color: themeColors.navy }]}>#{row.bill_number} · {row.customer_name}</Text>
           <Muted>{row.sport_name || "—"} · {row.start_date || "—"} → {row.end_date || "—"} · {row.timing}</Muted>
-          <Text style={styles.rowAmt}>₹{Number(row.amount || 0).toFixed(0)}</Text>
-          <Pressable onPress={() => confirmDelete("membership entry", async () => {
+          <Text style={[styles.rowAmt, { color: themeColors.navy }]}>₹{Number(row.amount || 0).toFixed(0)}</Text>
+          <DeleteIconButton onPress={() => confirmDelete("membership entry", async () => {
             await opsRequest(session, arenaId, `/ops/membership-billing/${row.id}`, { method: "DELETE" });
             await load();
-          })}>
-            <Text style={styles.delete}>Delete</Text>
-          </Pressable>
+          })} />
         </Card>
       ))}
     </Screen>
@@ -407,20 +424,17 @@ export function SalesScreen({
 
 const styles = StyleSheet.create({
   statsRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 4 },
-  stat: { color: colors.navy, fontWeight: "800", fontSize: 13 },
+  stat: { fontWeight: "800", fontSize: 13 },
   kpiRow: { flexDirection: "row", gap: 8 },
   kpiBox: {
     flex: 1,
-    backgroundColor: "#fff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: 12,
   },
-  kpiLabel: { color: colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
-  kpi: { color: colors.navy, fontSize: 16, fontWeight: "800", marginTop: 4 },
+  kpiLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
+  kpi: { fontSize: 16, fontWeight: "800", marginTop: 4 },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
-  rowTitle: { color: colors.navy, fontWeight: "700", fontSize: 14 },
-  rowAmt: { color: colors.navy, fontWeight: "800", marginTop: 4 },
-  delete: { color: colors.danger, fontWeight: "700", marginTop: 8 },
+  rowTitle: { fontWeight: "700", fontSize: 14 },
+  rowAmt: { fontWeight: "800", marginTop: 4 },
 });

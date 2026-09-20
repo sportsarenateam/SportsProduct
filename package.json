@@ -15,6 +15,11 @@
   "devDependencies": {
     "typescript": "^6.0.2"
   },
+  "dependencies": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3"
+  },
   "description": "",
   "keywords": [],
   "author": "",
@@ -25,7 +30,8 @@
     "packages/*"
   ],
   "overrides": {
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3"
   }
 }

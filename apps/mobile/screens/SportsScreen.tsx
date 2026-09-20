@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { apiRequest } from "../lib/api";
+import { sportImage } from "../lib/sportArt";
 import {
   BackHeader,
   Card,
@@ -9,8 +10,8 @@ import {
   Muted,
   PrimaryButton,
   Screen,
+  SportPickTile,
   Title,
-  colors,
 } from "../components/ui";
 
 const SPORT_OPTIONS = [
@@ -66,29 +67,19 @@ export function SportsScreen({
     <Screen>
       {onBack ? <BackHeader title="Sports" onBack={onBack} /> : null}
       <Title>What sports do you run?</Title>
-      <Muted>Select every sport at your arena. You can change this later from Profile actions.</Muted>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+      <Muted>Select every sport at your arena. You can change this later from Home → Add sports.</Muted>
+      <View style={styles.grid}>
         {SPORT_OPTIONS.map((name) => {
           const chosen = selected.includes(name);
           return (
-            <Pressable
+            <SportPickTile
               key={name}
+              name={name}
+              image={sportImage(name)}
+              active={chosen}
+              width="47%"
               onPress={() => toggle(name)}
-              style={{
-                width: "47%",
-                minHeight: 72,
-                borderRadius: 12,
-                borderWidth: 1.5,
-                borderColor: chosen ? colors.green : colors.border,
-                backgroundColor: chosen ? "#eef9e7" : "#fff",
-                padding: 12,
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ color: colors.navy, fontWeight: "700" }}>
-                {chosen ? "✓ " : ""}{name}
-              </Text>
-            </Pressable>
+            />
           );
         })}
       </View>
@@ -109,3 +100,12 @@ export function SportsScreen({
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+});

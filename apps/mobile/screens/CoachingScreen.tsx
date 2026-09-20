@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { opsRequest } from "../lib/api";
 import {
@@ -13,6 +13,7 @@ import {
   BackHeader,
   Card,
   Chip,
+  DeleteIconButton,
   ErrorText,
   Field,
   Label,
@@ -20,6 +21,7 @@ import {
   PrimaryButton,
   Screen,
 } from "../components/ui";
+import { useTheme } from "../lib/theme";
 
 export function CoachingScreen({
   session,
@@ -31,6 +33,7 @@ export function CoachingScreen({
   onBack: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
+  const { colors: themeColors } = useTheme();
   const [entries, setEntries] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -172,9 +175,25 @@ export function CoachingScreen({
         <Label>Recent</Label>
         {entries.length === 0 && <Muted>No coaching entries yet.</Muted>}
         {entries.slice(0, 20).map((entry) => (
-          <View key={entry.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }}>
-            <Text style={{ fontWeight: "700" }}>{entry.child_name} · #{entry.bill_number ?? "—"}</Text>
+          <View key={entry.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: themeColors.border }}>
+            <Text style={{ fontWeight: "700", color: themeColors.text }}>{entry.child_name} · #{entry.bill_number ?? "—"}</Text>
             <Muted>{entry.parent_name} · paid ₹{Math.max(0, Number(entry.amount || 0) - Number(entry.discount || 0) - Number(entry.advance || 0)).toFixed(0)}{Number(entry.advance || 0) > 0 ? ` · adv ₹${Number(entry.advance).toFixed(0)}` : ""}{Number(entry.discount || 0) > 0 ? ` · disc ₹${Number(entry.discount).toFixed(0)}` : ""}</Muted>
+            <DeleteIconButton
+              onPress={() => {
+                Alert.alert("Delete?", "Delete this coaching entry?", [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => {
+                      opsRequest(session, arenaId, `/ops/coaching/${entry.id}`, { method: "DELETE" })
+                        .then(() => load())
+                        .catch((err) => setError(err instanceof Error ? err.message : "Delete failed"));
+                    },
+                  },
+                ]);
+              }}
+            />
           </View>
         ))}
       </Card>

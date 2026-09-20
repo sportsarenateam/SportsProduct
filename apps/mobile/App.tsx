@@ -2,7 +2,7 @@ import { useEffect, useState, Component, type ReactNode } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import type { Session, User } from "@supabase/supabase-js";
-import { apiRequest, getApiUrl, loadApiUrlOverride, opsRequest, setApiUrlOverride } from "./lib/api";
+import { apiRequest, clearApiUrlOverride, getApiUrl, loadApiUrlOverride, opsRequest, setApiUrlOverride } from "./lib/api";
 import { supabase, supabaseConfigError } from "./lib/supabase";
 import type { AppRole, Arena, InventoryItem, MobilePage, SportConfig } from "./lib/types";
 import { Screen, Card, Muted, PrimaryButton, LinkButton, Title, Field, Label, colors } from "./components/ui";
@@ -10,7 +10,6 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { LandingScreen } from "./screens/LandingScreen";
 import { SetPasswordScreen } from "./screens/SetPasswordScreen";
 import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
-import { HomeScreen } from "./screens/HomeScreen";
 import { BookingScreen } from "./screens/BookingScreen";
 import { CoachingScreen } from "./screens/CoachingScreen";
 import { MembershipScreen } from "./screens/MembershipScreen";
@@ -22,6 +21,16 @@ import { SalesScreen } from "./screens/SalesScreen";
 import { SubscriptionScreen } from "./screens/SubscriptionScreen";
 import { SportsScreen } from "./screens/SportsScreen";
 import { ArenaOnboardingScreen } from "./screens/ArenaOnboardingScreen";
+import { WorkspaceNavigator } from "./navigation/WorkspaceNavigator";
+import {
+  useFonts,
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+  Manrope_800ExtraBold,
+} from "@expo-google-fonts/manrope";
+import * as SplashScreen from "expo-splash-screen";
 
 class ErrorBoundary extends Component<
   { children: ReactNode },
@@ -65,6 +74,8 @@ function isEntitled(arena: Arena) {
   return false;
 }
 
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -74,6 +85,18 @@ export default function App() {
 }
 
 function AppBody() {
+  const [fontsLoaded] = useFonts({
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync().catch(() => undefined);
+  }, [fontsLoaded]);
+
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
@@ -243,7 +266,7 @@ function AppBody() {
     setInventory(ops.inventory);
   }
 
-  if (!authReady || !apiReady || (session && !bootstrapDone)) {
+  if (!fontsLoaded || !authReady || !apiReady || (session && !bootstrapDone)) {
     return (
       <Screen scroll={false} navy>
         <StatusBar style="light" />
@@ -303,10 +326,18 @@ function AppBody() {
             placeholder="https://….trycloudflare.com"
           />
           <Muted>
-            Same Wi‑Fi often still blocks phone → PC. On PC run:
-            npx cloudflared tunnel --url http://127.0.0.1:4000
-            then paste the https URL here.
+            A real phone cannot use 127.0.0.1 (that is the phone itself). Use the live API,
+            or on PC run: npx cloudflared tunnel --url http://127.0.0.1:4000 and paste the https URL.
           </Muted>
+          <PrimaryButton
+            label="Use live API (api.sportsarena.team)"
+            onPress={async () => {
+              const url = await setApiUrlOverride("https://api.sportsarena.team");
+              setApiUrlDraft(url);
+              setOpsError("");
+              setBootKey((k) => k + 1);
+            }}
+          />
           <PrimaryButton
             label="Save API URL & retry"
             onPress={async () => {
@@ -316,6 +347,15 @@ function AppBody() {
             }}
           />
           <PrimaryButton label="Retry connection" onPress={() => { setOpsError(""); setBootKey((k) => k + 1); }} />
+          <LinkButton
+            label="Clear saved API override"
+            onPress={async () => {
+              const url = await clearApiUrlOverride();
+              setApiUrlDraft(url);
+              setOpsError("");
+              setBootKey((k) => k + 1);
+            }}
+          />
           <LinkButton label="Sign out" onPress={() => supabase.auth.signOut()} />
         </Card>
       </Screen>
@@ -378,137 +418,32 @@ function AppBody() {
     );
   }
 
-  if (page === "sports" && isOwner) {
-    return (
-      <SportsScreen
-        session={session}
-        initialSelected={sports.map((sport) => sport.name)}
-        onBack={sports.length ? () => setPage("home") : undefined}
-        onSaved={async () => {
-          await refreshOps();
-          setPage("home");
-          setMessage("Sports saved.");
-        }}
-      />
-    );
-  }
-
   if (isOwner && sports.length === 0) {
     return (
       <SportsScreen
         session={session}
         onSaved={async () => {
           await refreshOps();
-          setPage("home");
           setMessage("Sports saved.");
         }}
       />
     );
   }
 
-  if (page === "sales" && role === "owner") {
-    return (
-      <SalesScreen
-        session={session}
-        arenaId={arena.id}
-        onBack={() => setPage("home")}
-      />
-    );
-  }
-  if (page === "booking") {
-    return (
-      <BookingScreen
-        session={session}
-        arenaId={arena.id}
-        sport={selectedSport}
-        bevOnly={bevOnly}
-        inventory={inventory}
-        onBack={() => setPage("home")}
-        onDone={async () => {
-          await refreshOps();
-          setPage("home");
-          setMessage("Bill saved successfully.");
-        }}
-      />
-    );
-  }
-  if (page === "coaching") {
-    return <CoachingScreen session={session} arenaId={arena.id} onBack={() => setPage("home")} />;
-  }
-  if (page === "billing") {
-    return (
-      <MembershipScreen
-        session={session}
-        arenaId={arena.id}
-        sports={sports}
-        onBack={() => setPage("home")}
-      />
-    );
-  }
-  if (page === "expiring") {
-    return (
-      <MembershipExpiringScreen
-        session={session}
-        arenaId={arena.id}
-        arenaName={arena.name}
-        arenaPhone={arena.contactPhone}
-        onBack={() => setPage("home")}
-      />
-    );
-  }
-  if (page === "invoice") {
-    return <InvoiceScreen session={session} arena={arena} onBack={() => setPage("home")} />;
-  }
-  if (page === "menu") {
-    return (
-      <MenuScreen
-        session={session}
-        arenaId={arena.id}
-        sports={sports}
-        inventory={inventory}
-        onChanged={refreshOps}
-        onBack={() => setPage("home")}
-      />
-    );
-  }
-  if (page === "profile") {
-    return (
-      <ProfileScreen
-        session={session}
-        arena={arena}
-        role={role ?? "manager"}
-        onBack={() => setPage("home")}
-        onSaved={(next) => setArena((current) => (current ? { ...current, ...next } : current))}
-      />
-    );
-  }
-
   return (
-    <>
-      <StatusBar style="dark" />
-      {message ? (
-        <View style={{ backgroundColor: "#eef9e7", padding: 10 }}>
-          <Text style={{ color: "#357c13", textAlign: "center", fontWeight: "600" }}>{message}</Text>
-        </View>
-      ) : null}
-      <HomeScreen
-        email={session.user.email ?? ""}
-        arena={arena}
-        role={role ?? "manager"}
-        sports={sports}
-        onOpen={(next) => {
-          setMessage("");
-          setPage(next);
-        }}
-        onOpenBooking={(sport, onlyBev) => {
-          setMessage("");
-          setSelectedSport(sport);
-          setBevOnly(onlyBev);
-          setPage("booking");
-        }}
-        onLogout={() => supabase.auth.signOut()}
-        onUpgrade={isOwner ? () => setShowUpgrade(true) : undefined}
-      />
-    </>
+    <WorkspaceNavigator
+      session={session}
+      arena={arena}
+      role={role ?? "manager"}
+      sports={sports}
+      inventory={inventory}
+      message={message}
+      onMessage={setMessage}
+      onRefreshOps={refreshOps}
+      onArenaSaved={(next) => setArena((current) => (current ? { ...current, ...next } : current))}
+      onUpgrade={isOwner ? () => setShowUpgrade(true) : undefined}
+      onLogout={() => supabase.auth.signOut()}
+    />
   );
+
 }

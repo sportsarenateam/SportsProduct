@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import sportzArenaLogo from "../assets/sportzarena-logo.png";
+import sportzArenaBackground from "../assets/sportzarena-background.png";
 import { ThemeToggle } from "../components/ThemeToggle";
 import type { AppRole, CartItem, InventoryItem, SportConfig, WorkspacePage } from "./types";
 import {
@@ -127,24 +128,81 @@ function resolveSportArt(name: string, art: Record<string, string>) {
 }
 
 const modules = [
-  { id: "sales" as const, label: "Sales Report", tone: "purple", icon: "bag" },
-  { id: "coaching" as const, label: "Coaching", tone: "teal", icon: "people" },
-  { id: "billing" as const, label: "Membership", tone: "rose", icon: "doc" },
-  { id: "expiring" as const, label: "Membership expiring", tone: "amber", icon: "people" },
-  { id: "invoice" as const, label: "Generate Invoice", tone: "indigo", icon: "doc" },
-  { id: "menu" as const, label: "Manage Menu", tone: "indigo", icon: "grid" },
-  { id: "profile" as const, label: "Profile", tone: "amber", icon: "people" },
-  { id: "booking" as const, label: "Beverages & Equipment Only", tone: "amber", icon: "cup", bevOnly: true },
+  { id: "sales" as const, label: "Sales Report", sideLabel: "Sales Report", tone: "purple", icon: "bag", group: "quick" as const },
+  { id: "coaching" as const, label: "Coaching", sideLabel: "Coaching", tone: "teal", icon: "whistle", group: "quick" as const },
+  { id: "billing" as const, label: "Membership", sideLabel: "Membership", tone: "rose", icon: "card", group: "quick" as const },
+  { id: "expiring" as const, label: "Membership expiring", sideLabel: "Expiring soon", tone: "amber", icon: "alert", group: "quick" as const },
+  { id: "invoice" as const, label: "Generate Invoice", sideLabel: "Invoice", tone: "indigo", icon: "invoice", group: "more" as const },
+  { id: "menu" as const, label: "Manage Menu", sideLabel: "Manage Menu", tone: "indigo", icon: "grid", group: "more" as const },
+  { id: "profile" as const, label: "Profile", sideLabel: "Profile", tone: "amber", icon: "settings", group: "more" as const },
+  { id: "booking" as const, label: "Beverages & Equipment Only", sideLabel: "Bev & Equipment", tone: "amber", icon: "cup", bevOnly: true, group: "more" as const },
 ];
 
 function Icon({ name }: { name: string }) {
   const path =
     name === "bag" ? "M7 7V6a5 5 0 0 1 10 0v1h2.2c.9 0 1.6.8 1.5 1.7l-.9 10A2 2 0 0 1 17.8 21H6.2a2 2 0 0 1-2-1.8l-.9-10A1.5 1.5 0 0 1 4.8 7H7Zm2 0h6V6a3 3 0 0 0-6 0v1Z"
-    : name === "people" ? "M8.5 11a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 1a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM3 19.2C3 16.5 5.6 15 8.5 15s5.5 1.5 5.5 4.2V20H3v-.8Z"
+    : name === "people" ? "M8.5 11a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 1a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM3 19.2C3 16.5 5.6 15 8.5 15s5.5 1.5 5.5 4.2V20H3v-.8Zm7.5-.2c0-1.5.6-2.7 1.6-3.5 1 .5 2.1.7 3.4.7 1.5 0 2.9-.3 4.1-1 .8.8 1.4 2 1.4 3.8V20H10.5v-.8Z"
     : name === "doc" ? "M7 2h7l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V8h4.5L14 3.5Z"
     : name === "grid" ? "M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"
+    : name === "home" ? "M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-8.5Z"
+    : name === "calendar" ? "M7 3h2v2h6V3h2v2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3V3Zm13 8H4v8h16v-8Z"
+    : name === "chart" ? "M4 19h16v2H4v-2Zm2-2V9h2v8H6Zm5 0V5h2v12h-2Zm5 0v-6h2v6h-2Z"
+    : name === "rupee" ? "M7 4h10v2h-4.2c.7.6 1.2 1.3 1.5 2H17v2h-2.5c-.4 1.6-1.5 2.9-3.1 3.6L17 20h-2.6l-4.2-5.8H8V20H6V4h1Zm1 2v4h2.2c1.3 0 2.3-.9 2.3-2s-1-2-2.3-2H8Z"
+    : name === "whistle" ? "M4 10a4 4 0 0 1 4-4h6.2c.6-1.2 1.8-2 3.2-2A3.6 3.6 0 0 1 21 7.6c0 1.5-.9 2.8-2.2 3.3L17 17.2A3.2 3.2 0 0 1 13.9 20H8a4 4 0 0 1-4-4v-6Zm10.2 0H8a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h5.9c.5 0 1-.3 1.2-.8L16.8 11H14.2Zm3.2-4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z"
+    : name === "card" ? "M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm2 0v2h14V7H5Zm0 5v5h14v-5H5Zm2 2h4v2H7v-2Z"
+    : name === "alert" ? "M12 3.2 21.5 20H2.5L12 3.2ZM12 8l-5.8 10h11.6L12 8Zm-1 3h2v4h-2v-4Zm0 5h2v2h-2v-2Z"
+    : name === "invoice" ? "M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5ZM7 11h10v2H7v-2Zm0 4h7v2H7v-2Z"
+    : name === "settings" ? "M10.3 2h3.4l.4 2.2a6.8 6.8 0 0 1 1.7.9l2.1-.8 1.7 2.9-1.7 1.4c.1.5.2 1 .2 1.4s-.1.9-.2 1.4l1.7 1.4-1.7 2.9-2.1-.8a6.8 6.8 0 0 1-1.7.9L13.7 22h-3.4l-.4-2.2a6.8 6.8 0 0 1-1.7-.9l-2.1.8-1.7-2.9 1.7-1.4A7.5 7.5 0 0 1 5.9 12c0-.5.1-1 .2-1.4L4.4 9.2 6.1 6.3l2.1.8a6.8 6.8 0 0 1 1.7-.9L10.3 2ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"
+    : name === "cup" ? "M6 4h10v2H6V4Zm1 3h8l-.6 8.2A2.5 2.5 0 0 1 11.9 17H9.1a2.5 2.5 0 0 1-2.5-1.8L6 7h1Zm-2 1H3.5A2.5 2.5 0 0 0 1 10.5 2.5 2.5 0 0 0 3.5 13H5l.2-2H3.5a.5.5 0 0 1 0-1H5.2L5 8Zm3 12h6v2H8v-2Z"
     : "M6 19a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.5A4.5 4.5 0 1 1 17 19H6Z";
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d={path} /></svg>;
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d={path} />
+    </svg>
+  );
+}
+
+function timeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
+function DeleteButton({
+  onClick,
+  label = "Delete",
+}: {
+  onClick: () => void | Promise<void>;
+  label?: string;
+}) {
+  return (
+    <button type="button" className="btn-delete" onClick={() => { void onClick(); }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="btn-delete-icon">
+        <path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Zm-1 12h12a2 2 0 0 0 2-2V7H4v12a2 2 0 0 0 2 2Z" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+function PreviewEyeButton({
+  onClick,
+  label = "Preview invoice",
+}: {
+  onClick: () => void;
+  label?: string;
+}) {
+  return (
+    <button type="button" className="btn-preview-eye" onClick={onClick} title={label} aria-label={label}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="btn-preview-eye-icon">
+        <path
+          fill="currentColor"
+          d="M12 5c5.2 0 9.5 3.4 11 7-1.5 3.6-5.8 7-11 7S2.5 15.6 1 12c1.5-3.6 5.8-7 11-7Zm0 2c-3.9 0-7.2 2.4-8.7 5 1.5 2.6 4.8 5 8.7 5s7.2-2.4 8.7-5C19.2 9.4 15.9 7 12 7Zm0 2.5A2.5 2.5 0 1 1 12 14a2.5 2.5 0 0 1 0-4.5Z"
+        />
+      </svg>
+    </button>
+  );
 }
 
 function isEntitled(arena: Arena) {
@@ -189,6 +247,8 @@ export function WorkspaceApp({
   const [selectedSport, setSelectedSport] = useState<SportConfig | null>(null);
   const [bevOnly, setBevOnly] = useState(initialBevOnly);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [homeStats, setHomeStats] = useState({ revenue: 0, bookings: 0, customers: 0 });
+  const [revenueByMonth, setRevenueByMonth] = useState<Array<{ key: string; label: string; revenue: number; bookings: number }>>([]);
   const sportKey = useMemo(() => sportNames.join("|"), [sportNames]);
   const entitled = isEntitled(arena);
   const trialActive = entitled && (arena.status === "trialing" || arena.status === "created");
@@ -199,6 +259,15 @@ export function WorkspaceApp({
     ? daysUntil(arena.current_period_ends_at)
     : null;
   const renewSoon = planDaysLeft !== null && planDaysLeft <= 7;
+  const courtCount = sports.reduce((sum, sport) => sum + sport.courts.length, 0);
+  const todayLabel = new Date().toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const quickModules = visibleModules.filter((module) => module.group === "quick");
+  const moreModules = visibleModules.filter((module) => module.group === "more");
 
   useEffect(() => {
     if (!message) return;
@@ -239,238 +308,474 @@ export function WorkspaceApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.access_token, arena.id, sportKey, canUseApp]);
 
+  useEffect(() => {
+    if (!canUseApp || !isOwner || page !== "home") return;
+    let cancelled = false;
+    const now = new Date();
+    const monthKeys: string[] = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    const currentMonth = monthKeys[monthKeys.length - 1];
+
+    Promise.all([
+      opsRequest<{ transactions: Array<{ created_at?: string; grand_total?: number; customer_mobile?: string; sport_name?: string }> }>(
+        session,
+        arena.id,
+        "/ops/transactions",
+      ),
+      opsRequest<{ entries: Array<{ created_at?: string; amount?: number; discount?: number; advance?: number }> }>(
+        session,
+        arena.id,
+        "/ops/coaching",
+      ).catch(() => ({ entries: [] })),
+      opsRequest<{ entries: Array<{ created_at?: string; amount?: number }> }>(
+        session,
+        arena.id,
+        "/ops/membership-billing",
+      ).catch(() => ({ entries: [] })),
+    ])
+      .then(([txData, coachData, memberData]) => {
+        if (cancelled) return;
+        const tx = txData.transactions ?? [];
+        const coaching = coachData.entries ?? [];
+        const membership = memberData.entries ?? [];
+
+        const monthRows = tx.filter((row) => String(row.created_at ?? "").slice(0, 7) === currentMonth);
+        const bookings = monthRows.filter((row) => String(row.sport_name ?? "").trim()).length;
+        const txRevenue = monthRows.reduce((sum, row) => sum + Number(row.grand_total || 0), 0);
+        const coachRevenue = coaching
+          .filter((row) => String(row.created_at ?? "").slice(0, 7) === currentMonth)
+          .reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0) - Number(row.discount || 0) - Number(row.advance || 0)), 0);
+        const memberRevenue = membership
+          .filter((row) => String(row.created_at ?? "").slice(0, 7) === currentMonth)
+          .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        const customers = new Set(monthRows.map((row) => row.customer_mobile).filter(Boolean)).size;
+        setHomeStats({
+          revenue: txRevenue + coachRevenue + memberRevenue,
+          bookings,
+          customers,
+        });
+
+        const series = monthKeys.map((key) => {
+          const label = new Date(`${key}-01T00:00:00`).toLocaleDateString("en-IN", { month: "short" });
+          const monthTx = tx.filter((row) => String(row.created_at ?? "").slice(0, 7) === key);
+          const revenue =
+            monthTx.reduce((sum, row) => sum + Number(row.grand_total || 0), 0)
+            + coaching
+              .filter((row) => String(row.created_at ?? "").slice(0, 7) === key)
+              .reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0) - Number(row.discount || 0) - Number(row.advance || 0)), 0)
+            + membership
+              .filter((row) => String(row.created_at ?? "").slice(0, 7) === key)
+              .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+          const bookingCount = monthTx.filter((row) => String(row.sport_name ?? "").trim()).length;
+          return { key, label, revenue, bookings: bookingCount };
+        });
+        setRevenueByMonth(series);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [canUseApp, isOwner, page, session, arena.id]);
+
+  const revenueChartMax = Math.max(...revenueByMonth.map((row) => row.revenue), 1);
+  const bookingChartMax = Math.max(...revenueByMonth.map((row) => row.bookings), 1);
+  const revenueTrendUp = revenueByMonth.length >= 2
+    && revenueByMonth[revenueByMonth.length - 1].revenue >= revenueByMonth[revenueByMonth.length - 2].revenue;
+
   function openBooking(sport: SportConfig | null, onlyBev: boolean) {
     setSelectedSport(sport);
     setPage("booking", onlyBev);
+  }
+
+  function openModule(module: (typeof modules)[number]) {
+    if (module.bevOnly) openBooking(null, true);
+    else setPage(module.id);
+  }
+
+  function isModuleActive(module: (typeof modules)[number]) {
+    if (module.bevOnly) return page === "booking" && bevOnly;
+    return page === module.id;
   }
 
   function sportImage(name: string) {
     return resolveSportArt(name, sportArt);
   }
 
+  const activeModuleLabel = page === "home"
+    ? "Dashboard"
+    : visibleModules.find((module) => isModuleActive(module))?.label ?? "Workspace";
+
   return (
-    <main className="app-shell workspace-shell">
-      <nav>
-        <div className="workspace-nav-left">
-          <img className="brand-logo" src={sportzArenaLogo} alt="SportzArena" />
-          <div className="workspace-arena-meta">
-            <strong>{arena.name}</strong>
-            <span>{planRenewLabel(arena)}</span>
-          </div>
-        </div>
-        <div className="workspace-nav-actions">
-          <ThemeToggle />
-          {page !== "home" && canUseApp && <button className="link" onClick={() => setPage("home")}>← Dashboard</button>}
-          {((trialActive && !showUpgrade) || (renewSoon && isOwner && !trialActive)) && (
-            <button className="link" type="button" onClick={() => setShowUpgrade(true)}>
-              {renewSoon && !trialActive ? "Renew" : "Upgrade"}
+    <main className="app-shell workspace-shell dash-shell">
+      <aside className="dash-sidebar">
+        <button type="button" className="dash-side-brand" onClick={() => setPage("home")}>
+          <img src={sportzArenaLogo} alt="" />
+          <span>
+            <strong>Sportz<span>Arena</span></strong>
+            <small>{arena.name}</small>
+          </span>
+        </button>
+        <nav className="dash-side-nav" aria-label="Workspace">
+          <button
+            type="button"
+            className={`dash-side-link${page === "home" ? " is-active" : ""}`}
+            onClick={() => setPage("home")}
+          >
+            <span className="dash-side-ico tone-home"><Icon name="home" /></span>
+            <span className="dash-side-text">Dashboard</span>
+          </button>
+
+          <p className="dash-side-group">Quick actions</p>
+          {quickModules.map((module) => (
+            <button
+              key={module.id}
+              type="button"
+              className={`dash-side-link${isModuleActive(module) ? " is-active" : ""}`}
+              onClick={() => openModule(module)}
+              title={module.label}
+            >
+              <span className={`dash-side-ico tone-${module.tone}`}><Icon name={module.icon} /></span>
+              <span className="dash-side-text">{module.sideLabel}</span>
             </button>
-          )}
-          <button className="link" onClick={onAddSports}>Add sports</button>
-          <button className="link" onClick={onLogout}>Log out</button>
+          ))}
+
+          <p className="dash-side-group">More actions</p>
+          {moreModules.map((module) => (
+            <button
+              key={module.id}
+              type="button"
+              className={`dash-side-link${isModuleActive(module) ? " is-active" : ""}`}
+              onClick={() => openModule(module)}
+              title={module.label}
+            >
+              <span className={`dash-side-ico tone-${module.tone}`}><Icon name={module.icon} /></span>
+              <span className="dash-side-text">{module.sideLabel}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="dash-side-foot">
+          <p className="dash-side-script">More Sports More Possibilities</p>
         </div>
-      </nav>
+      </aside>
 
-      <section className="workspace">
-        {message && <p className="workspace-notice">{message}</p>}
+      <div className="dash-main">
+        <header className="dash-topbar">
+          <div className="dash-topbar-left">
+            <p className="dash-topbar-kicker">{activeModuleLabel}</p>
+            <strong>{arena.name}</strong>
+            <small>{planRenewLabel(arena)}</small>
+          </div>
+          <div className="dash-topbar-actions">
+            <ThemeToggle />
+            {((trialActive && !showUpgrade) || (renewSoon && isOwner && !trialActive)) && (
+              <button className="link" type="button" onClick={() => setShowUpgrade(true)}>
+                {renewSoon && !trialActive ? "Renew" : "Upgrade"}
+              </button>
+            )}
+            <button className="link" type="button" onClick={onAddSports}>Add sports</button>
+            <div className="dash-user-chip">
+              <span className="dash-user-avatar" aria-hidden="true">{(session.user.email?.[0] ?? "A").toUpperCase()}</span>
+              <span>
+                <b>{isOwner ? "Admin" : "Staff"}</b>
+                <small>{isOwner ? "Arena Owner" : "Arena Staff"}</small>
+              </span>
+            </div>
+            <button className="link" type="button" onClick={onLogout}>Log out</button>
+          </div>
+        </header>
 
-        {showPaywall && (
-          isOwner ? (
-            <SubscriptionGate
+        <section className="workspace dash-content">
+          {message && <p className="workspace-notice">{message}</p>}
+
+          {showPaywall && (
+            isOwner ? (
+              <SubscriptionGate
+                session={session}
+                arena={arena}
+                upgradingDuringTrial={showUpgrade && isEntitled(arena)}
+                onActivated={(next) => {
+                  setShowUpgrade(false);
+                  onSubscriptionUpdated?.(next);
+                  setMessage("Subscription activated. Welcome aboard!");
+                }}
+                onDismiss={showUpgrade && isEntitled(arena) ? () => setShowUpgrade(false) : undefined}
+              />
+            ) : (
+              <div className="ops-panel subscription-gate">
+                <div className="ops-card subscribe-card">
+                  <h2>Arena access paused</h2>
+                  <p>Ask the arena owner to renew the SportzArena subscription. Staff cannot make payments.</p>
+                </div>
+              </div>
+            )
+          )}
+
+          {canUseApp && page === "home" && (
+            <div className="dash-home">
+              <div className="dash-home-primary">
+                <header className="dash-greeting" style={{ backgroundImage: `url(${sportzArenaBackground})` }}>
+                  <div className="dash-greeting-copy">
+                    <h1>{timeGreeting()}, {isOwner ? "Admin" : "Staff"} 👋</h1>
+                    <p>
+                      {isOwner
+                        ? "Here’s what’s happening across bookings, members, and sales today."
+                        : "Book courts, bill walk-ins, and keep coaching running."}
+                    </p>
+                  </div>
+                </header>
+
+                {renewSoon && isOwner && !trialActive && (
+                  <div className="trial-banner">
+                    <div>
+                      <strong>
+                        {planDaysLeft === 0
+                          ? "Your plan ended — renew to stay online"
+                          : `Plan renews in ${planDaysLeft} day${planDaysLeft === 1 ? "" : "s"}`}
+                      </strong>
+                      <p>
+                        {arena.current_period_ends_at
+                          ? `Renew before ${formatPlanDate(arena.current_period_ends_at)} to avoid interruption.`
+                          : "Renew your SportzArena plan to keep access."}
+                      </p>
+                    </div>
+                    <button type="button" className="primary" onClick={() => setShowUpgrade(true)}>
+                      Renew plan
+                    </button>
+                  </div>
+                )}
+
+                {trialActive && isOwner && (
+                  <div className="trial-banner">
+                    <div>
+                      <strong>{days > 0 ? `${days} days left on your free trial` : "Your free trial ends today"}</strong>
+                      <p>Subscribe anytime to keep bookings and billing uninterrupted.</p>
+                    </div>
+                    <button type="button" className="primary" onClick={() => setShowUpgrade(true)}>
+                      Choose a plan
+                    </button>
+                  </div>
+                )}
+
+                <div className="dash-kpi-grid">
+                  <article className="dash-kpi tone-green">
+                    <span className="dash-kpi-ico" aria-hidden="true"><Icon name="rupee" /></span>
+                    <div className="dash-kpi-copy">
+                      <span className="dash-kpi-label">Total Revenue</span>
+                      <strong>₹{isOwner ? homeStats.revenue.toLocaleString("en-IN") : "—"}</strong>
+                      <small className="dash-kpi-trend up">{isOwner ? "↑ This month" : "Owner only"}</small>
+                    </div>
+                  </article>
+                  <article className="dash-kpi tone-blue">
+                    <span className="dash-kpi-ico" aria-hidden="true"><Icon name="calendar" /></span>
+                    <div className="dash-kpi-copy">
+                      <span className="dash-kpi-label">Total Bookings</span>
+                      <strong>{isOwner ? homeStats.bookings : sports.length}</strong>
+                      <small className="dash-kpi-trend up">{isOwner ? "↑ This month" : "Sports ready"}</small>
+                    </div>
+                  </article>
+                  <article className="dash-kpi tone-violet">
+                    <span className="dash-kpi-ico" aria-hidden="true"><Icon name="people" /></span>
+                    <div className="dash-kpi-copy">
+                      <span className="dash-kpi-label">Active Customers</span>
+                      <strong>{isOwner ? homeStats.customers : inventory.length}</strong>
+                      <small className="dash-kpi-trend up">{isOwner ? "↑ Unique mobiles" : "Menu items"}</small>
+                    </div>
+                  </article>
+                  <article className="dash-kpi tone-teal">
+                    <span className="dash-kpi-ico" aria-hidden="true"><Icon name="chart" /></span>
+                    <div className="dash-kpi-copy">
+                      <span className="dash-kpi-label">Courts Online</span>
+                      <strong>{courtCount}</strong>
+                      <small className="dash-kpi-trend">{sports.length} sport{sports.length === 1 ? "" : "s"}</small>
+                    </div>
+                  </article>
+                </div>
+
+                <div className="dash-mid-row">
+                  <section className="dash-card dash-chart-card">
+                    <div className="dash-card-head">
+                      <div className="dash-card-title">
+                        <h2>Revenue Overview</h2>
+                        {isOwner && revenueByMonth.length > 0 && (
+                          <span className={`dash-trend-badge ${revenueTrendUp ? "up" : "down"}`} aria-label={revenueTrendUp ? "Up vs last month" : "Down vs last month"}>
+                            {revenueTrendUp ? "▲" : "▼"}
+                          </span>
+                        )}
+                      </div>
+                      <button type="button" className="link" onClick={() => isOwner && setPage("sales")}>
+                        {isOwner ? "Open report →" : "Owner report"}
+                      </button>
+                    </div>
+                    {isOwner ? (
+                      <>
+                        <div className="dash-month-chart" role="img" aria-label="Month wise revenue for the last 6 months">
+                          {revenueByMonth.map((row) => {
+                            const revenueHeight = Math.max(6, Math.round((row.revenue / revenueChartMax) * 100));
+                            const bookingHeight = Math.max(4, Math.round((row.bookings / bookingChartMax) * 70));
+                            return (
+                              <div key={row.key} className="dash-month-col" title={`${row.label}: ₹${row.revenue.toLocaleString("en-IN")} · ${row.bookings} bookings`}>
+                                <div className="dash-month-bars">
+                                  <i className="bar-revenue" style={{ height: `${revenueHeight}%` }} />
+                                  <i className="bar-bookings" style={{ height: `${bookingHeight}%` }} />
+                                </div>
+                                <strong>₹{row.revenue >= 1000 ? `${(row.revenue / 1000).toFixed(row.revenue >= 10000 ? 0 : 1)}k` : row.revenue.toFixed(0)}</strong>
+                                <span>{row.label}</span>
+                              </div>
+                            );
+                          })}
+                          {!revenueByMonth.length && <p className="workspace-empty">No sales data yet.</p>}
+                        </div>
+                        <div className="dash-chart-legend">
+                          <span><i className="lg-blue" /> Revenue (month)</span>
+                          <span><i className="lg-green" /> Bookings</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="workspace-empty">Revenue overview is available to arena owners.</p>
+                    )}
+                  </section>
+                  <section className="dash-card dash-donut-card">
+                    <div className="dash-card-head">
+                      <h2>Sports Mix</h2>
+                    </div>
+                    <div className="dash-donut-wrap">
+                      <div className="dash-donut" aria-hidden="true">
+                        <strong>{sports.length}</strong>
+                        <small>Sports</small>
+                      </div>
+                      <ul className="dash-sport-list">
+                        {sports.slice(0, 4).map((sport, index) => (
+                          <li key={sport.id}>
+                            <i className={`dot-${index}`} />
+                            <div className="dash-sport-row">
+                              <b>{sport.name}</b>
+                              <span>{sport.courts.length} court{sport.courts.length === 1 ? "" : "s"}</span>
+                            </div>
+                          </li>
+                        ))}
+                        {!sports.length && <li>No sports yet</li>}
+                      </ul>
+                    </div>
+                  </section>
+                </div>
+
+                <section className="dash-card dash-sports-card">
+                  <div className="dash-card-head">
+                    <h2>Select Sport to Book</h2>
+                    {isOwner && <button type="button" className="link" onClick={onAddSports}>Manage sports</button>}
+                  </div>
+                  <div className="workspace-sport-grid">
+                    {sports.map((sport) => {
+                      const art = sportImage(sport.name);
+                      return (
+                        <button key={sport.id} type="button" className="workspace-sport-card" onClick={() => openBooking(sport, false)}>
+                          <div className="workspace-sport-art">
+                            {art
+                              ? <img className="sport-tile-img" src={art} alt="" onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextElementSibling?.classList.remove("is-hidden"); }} />
+                              : null}
+                            <span className={`workspace-sport-fallback${art ? " is-hidden" : ""}`}>{sport.name[0]}</span>
+                          </div>
+                          <b className="workspace-sport-name">{sport.name}</b>
+                          <small className="workspace-sport-meta">
+                            {sport.courts.length} court{sport.courts.length === 1 ? "" : "s"}
+                            {sport.pricePerHour > 0 ? ` · ₹${sport.pricePerHour}/hr` : ""}
+                          </small>
+                        </button>
+                      );
+                    })}
+                    {!sports.length && <p className="workspace-empty">No sports selected yet. Use Add sports to continue.</p>}
+                  </div>
+                </section>
+              </div>
+
+              <aside className="dash-home-rail">
+                <div className="dash-date-pill">
+                  <Icon name="calendar" />
+                  <span>{todayLabel}</span>
+                </div>
+
+                <section className="dash-card">
+                  <h3>Book a sport</h3>
+                  <div className="dash-action-list">
+                    {sports.slice(0, 5).map((sport) => (
+                      <button
+                        key={sport.id}
+                        type="button"
+                        className="dash-action-row"
+                        onClick={() => openBooking(sport, false)}
+                      >
+                        <span className="dash-quick-ico tone-teal"><Icon name="calendar" /></span>
+                        <span>{sport.name}</span>
+                      </button>
+                    ))}
+                    {!sports.length && <p className="workspace-empty">Add sports to start booking.</p>}
+                  </div>
+                </section>
+
+                <section className="dash-promo">
+                  <p>Grow Your Sports Business</p>
+                  <button type="button" className="primary" onClick={() => isOwner && setPage("sales")}>
+                    View Reports →
+                  </button>
+                </section>
+              </aside>
+            </div>
+          )}
+
+          {canUseApp && page === "booking" && (
+            <BookingPanel
+              session={session}
+              arenaId={arena.id}
+              sport={selectedSport}
+              bevOnly={bevOnly}
+              inventory={inventory}
+              onDone={async () => { await refresh(); setPage("home"); setMessage("Bill saved successfully."); }}
+              onBack={() => setPage("home")}
+            />
+          )}
+          {canUseApp && page === "sales" && isOwner && <SalesPanel session={session} arenaId={arena.id} onBack={() => setPage("home")} />}
+          {canUseApp && page === "coaching" && <CoachingPanel session={session} arenaId={arena.id} onBack={() => setPage("home")} />}
+          {canUseApp && page === "billing" && <BillingPanel session={session} arenaId={arena.id} sports={sports} onBack={() => setPage("home")} />}
+          {canUseApp && page === "expiring" && (
+            <MembershipExpiringPanel
+              session={session}
+              arenaId={arena.id}
+              arenaName={arena.name}
+              arenaPhone={arena.contactPhone}
+              onBack={() => setPage("home")}
+            />
+          )}
+          {canUseApp && page === "invoice" && (
+            <InvoicePanel
               session={session}
               arena={arena}
-              upgradingDuringTrial={showUpgrade && isEntitled(arena)}
-              onActivated={(next) => {
-                setShowUpgrade(false);
-                onSubscriptionUpdated?.(next);
-                setMessage("Subscription activated. Welcome aboard!");
-              }}
-              onDismiss={showUpgrade && isEntitled(arena) ? () => setShowUpgrade(false) : undefined}
+              sports={sports}
+              inventory={inventory}
+              onBack={() => setPage("home")}
             />
-          ) : (
-            <div className="ops-panel subscription-gate">
-              <div className="ops-card subscribe-card">
-                <h2>Arena access paused</h2>
-                <p>Ask the arena owner to renew the SportzArena subscription. Staff cannot make payments.</p>
-              </div>
-            </div>
-          )
-        )}
-
-        {canUseApp && page === "home" && (
-          <>
-            <header className="workspace-welcome">
-              <div className="workspace-welcome-top">
-                <div>
-                  <p className="workspace-kicker">Dashboard</p>
-                  <h1>{arena.name}</h1>
-                  <p>
-                    {isOwner
-                      ? "Book courts, bill walk-ins, and manage coaching and sales."
-                      : "Book courts, bill walk-ins, and keep coaching running."}
-                  </p>
-                </div>
-              </div>
-              <div className="workspace-status-row">
-                <div className="workspace-status-chip">
-                  <span>Status</span>
-                  <strong>
-                    {arena.status === "trialing" || arena.status === "created"
-                      ? (days > 0 ? `${days}d trial` : "Trial end")
-                      : ["active", "authenticated"].includes(arena.status)
-                        ? "Active"
-                        : "Paywall"}
-                  </strong>
-                </div>
-                <div className="workspace-status-chip">
-                  <span>Sports</span>
-                  <strong>{sports.length}</strong>
-                </div>
-                <div className="workspace-status-chip">
-                  <span>Plan</span>
-                  <strong>
-                    {arena.current_period_ends_at
-                      ? `Till ${formatPlanDate(arena.current_period_ends_at)}`
-                      : trialActive
-                        ? (days > 0 ? `${days}d trial` : "Trial end")
-                        : "₹499/mo"}
-                  </strong>
-                </div>
-              </div>
-            </header>
-
-            {renewSoon && isOwner && !trialActive && (
-              <div className="trial-banner">
-                <div>
-                  <strong>
-                    {planDaysLeft === 0
-                      ? "Your plan ended — renew to stay online"
-                      : `Plan renews in ${planDaysLeft} day${planDaysLeft === 1 ? "" : "s"}`}
-                  </strong>
-                  <p>
-                    {arena.current_period_ends_at
-                      ? `Renew before ${formatPlanDate(arena.current_period_ends_at)} to avoid interruption.`
-                      : "Renew your SportzArena plan to keep access."}
-                  </p>
-                </div>
-                <button type="button" className="primary" onClick={() => setShowUpgrade(true)}>
-                  Renew plan
-                </button>
-              </div>
-            )}
-
-            {trialActive && isOwner && (
-              <div className="trial-banner">
-                <div>
-                  <strong>{days > 0 ? `${days} days left on your free trial` : "Your free trial ends today"}</strong>
-                  <p>Subscribe anytime to keep bookings and billing uninterrupted.</p>
-                </div>
-                <button type="button" className="primary" onClick={() => setShowUpgrade(true)}>
-                  Choose a plan
-                </button>
-              </div>
-            )}
-
-            <p className="workspace-section-label">Quick actions</p>
-            <div className="workspace-modules">
-              {visibleModules.map((module) => (
-                <button
-                  key={module.id}
-                  type="button"
-                  className={`workspace-module tone-${module.tone}`}
-                  onClick={() => {
-                    if (module.bevOnly) openBooking(null, true);
-                    else setPage(module.id);
-                  }}
-                >
-                  <span className="workspace-module-icon"><Icon name={module.icon} /></span>
-                  <span>{module.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="workspace-sports-head">
-              <h2>Select Sport to Book</h2>
-              {isOwner && <button type="button" className="link" onClick={onAddSports}>Manage sports</button>}
-            </div>
-            <div className="workspace-sport-grid">
-              {sports.map((sport) => {
-                const art = sportImage(sport.name);
-                return (
-                  <button key={sport.id} type="button" className="workspace-sport-card" onClick={() => openBooking(sport, false)}>
-                    <div className="workspace-sport-art">
-                      {art
-                        ? <img className="sport-tile-img" src={art} alt="" onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextElementSibling?.classList.remove("is-hidden"); }} />
-                        : null}
-                      <span className={`workspace-sport-fallback${art ? " is-hidden" : ""}`}>{sport.name[0]}</span>
-                    </div>
-                    <div className="workspace-sport-meta">
-                      <div className="workspace-sport-title">
-                        <b>{sport.name}</b>
-                        <span>Active</span>
-                      </div>
-                      <div className="workspace-sport-footer">
-                        <small>{sport.courts.length} court{sport.courts.length === 1 ? "" : "s"}</small>
-                        <strong>{sport.pricePerHour > 0 ? `₹${sport.pricePerHour}/hr` : "Rate not set"}</strong>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-              {!sports.length && <p className="workspace-empty">No sports selected yet. Use Add sports to continue.</p>}
-            </div>
-          </>
-        )}
-
-        {canUseApp && page === "booking" && (
-          <BookingPanel
-            session={session}
-            arenaId={arena.id}
-            sport={selectedSport}
-            bevOnly={bevOnly}
-            inventory={inventory}
-            onDone={async () => { await refresh(); setPage("home"); setMessage("Bill saved successfully."); }}
-            onBack={() => setPage("home")}
-          />
-        )}
-        {canUseApp && page === "sales" && isOwner && <SalesPanel session={session} arenaId={arena.id} onBack={() => setPage("home")} />}
-        {canUseApp && page === "coaching" && <CoachingPanel session={session} arenaId={arena.id} onBack={() => setPage("home")} />}
-        {canUseApp && page === "billing" && <BillingPanel session={session} arenaId={arena.id} sports={sports} onBack={() => setPage("home")} />}
-        {canUseApp && page === "expiring" && (
-          <MembershipExpiringPanel
-            session={session}
-            arenaId={arena.id}
-            arenaName={arena.name}
-            arenaPhone={arena.contactPhone}
-            onBack={() => setPage("home")}
-          />
-        )}
-        {canUseApp && page === "invoice" && (
-          <InvoicePanel
-            session={session}
-            arena={arena}
-            onBack={() => setPage("home")}
-          />
-        )}
-        {canUseApp && page === "profile" && (
-          <ProfilePanel
-            session={session}
-            arena={arena}
-            role={role}
-            onBack={() => setPage("home")}
-            onSaved={(next) => onSubscriptionUpdated?.(next)}
-          />
-        )}
-        {canUseApp && page === "menu" && (
-          <MenuPanel
-            session={session}
-            arenaId={arena.id}
-            sports={sports}
-            inventory={inventory}
-            onChanged={refresh}
-            onBack={() => setPage("home")}
-          />
-        )}
-      </section>
+          )}
+          {canUseApp && page === "profile" && (
+            <ProfilePanel
+              session={session}
+              arena={arena}
+              role={role}
+              onBack={() => setPage("home")}
+              onSaved={(next) => onSubscriptionUpdated?.(next)}
+            />
+          )}
+          {canUseApp && page === "menu" && (
+            <MenuPanel
+              session={session}
+              arenaId={arena.id}
+              sports={sports}
+              inventory={inventory}
+              onChanged={refresh}
+              onBack={() => setPage("home")}
+            />
+          )}
+        </section>
+      </div>
     </main>
   );
 }
@@ -1532,10 +1837,13 @@ function CoachingPanel({ session, arenaId, onBack }: { session: Session; arenaId
                 <td>₹{Number(entry.advance || 0).toFixed(0)}</td>
                 <td>₹{Math.max(0, Number(entry.amount || 0) - Number(entry.discount || 0) - Number(entry.advance || 0)).toFixed(0)}</td>
                 <td>
-                  <button type="button" className="link" onClick={async () => {
-                    await opsRequest(session, arenaId, `/ops/coaching/${entry.id}`, { method: "DELETE" });
-                    await load();
-                  }}>Delete</button>
+                  <DeleteButton
+                    onClick={async () => {
+                      if (!window.confirm("Delete this coaching entry?")) return;
+                      await opsRequest(session, arenaId, `/ops/coaching/${entry.id}`, { method: "DELETE" });
+                      await load();
+                    }}
+                  />
                 </td>
               </tr>
             ))}
@@ -1637,9 +1945,7 @@ function MembershipExpiringPanel({
                     <button type="button" className="primary" onClick={() => remind(entry)}>
                       Remind
                     </button>
-                    <button type="button" className="link" onClick={() => removeEntry(entry).catch(() => undefined)}>
-                      Delete
-                    </button>
+                    <DeleteButton onClick={() => removeEntry(entry)} />
                   </td>
                 </tr>
               ))}
@@ -1772,7 +2078,7 @@ function BillingPanel({
       </form>
       <div className="ops-table-wrap">
         <table>
-          <thead><tr><th>Bill</th><th>Customer</th><th>Mobile</th><th>Sports</th><th>Period</th><th>Time</th><th>Amount</th></tr></thead>
+          <thead><tr><th>Bill</th><th>Customer</th><th>Mobile</th><th>Sports</th><th>Period</th><th>Time</th><th>Amount</th><th></th></tr></thead>
           <tbody>
             {entries.map((entry) => (
               <tr key={entry.id}>
@@ -1783,6 +2089,15 @@ function BillingPanel({
                 <td>{entry.start_date || "—"} → {entry.end_date || "—"}</td>
                 <td>{entry.timing}</td>
                 <td>₹{Number(entry.amount).toFixed(0)}</td>
+                <td>
+                  <DeleteButton
+                    onClick={async () => {
+                      if (!window.confirm(`Delete membership for ${entry.customer_name}?`)) return;
+                      await opsRequest(session, arenaId, `/ops/membership-billing/${entry.id}`, { method: "DELETE" });
+                      await load();
+                    }}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1818,14 +2133,18 @@ type InvoiceDraft = {
 };
 
 function InvoicePanel({
-  session, arena, onBack,
+  session, arena, sports, inventory, onBack,
 }: {
-  session: Session; arena: Arena; onBack: () => void;
+  session: Session;
+  arena: Arena;
+  sports: SportConfig[];
+  inventory: InventoryItem[];
+  onBack: () => void;
 }) {
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
   const [sportName, setSportName] = useState("");
-  const [courtNames, setCourtNames] = useState("");
+  const [selectedCourtIds, setSelectedCourtIds] = useState<string[]>([]);
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
@@ -1854,6 +2173,11 @@ function InvoicePanel({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const selectedSport = sports.find((s) => s.name === sportName) ?? null;
+  const courtNames = selectedSport
+    ? selectedSport.courts.filter((c) => selectedCourtIds.includes(c.id)).map((c) => c.name)
+    : [];
+
   async function loadHistory() {
     const data = await opsRequest<{ invoices: typeof history }>(session, arena.id, "/ops/generated-invoices");
     const list = data.invoices.map((row) => ({ ...row, payload: row.payload as InvoiceDraft }));
@@ -1871,11 +2195,36 @@ function InvoicePanel({
     loadHistory().catch(() => undefined);
   }, [session.access_token, arena.id]);
 
+  useEffect(() => {
+    setSelectedCourtIds([]);
+  }, [sportName]);
+
+  function toggleCourt(id: string) {
+    setSelectedCourtIds((current) => (
+      current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
+    ));
+  }
+
+  function pickInventoryItem(itemId: string) {
+    const item = inventory.find((row) => row.id === itemId);
+    if (!item) return;
+    setItemName(item.name);
+    setItemPrice(String(item.price));
+    if (!itemQty) setItemQty("1");
+  }
+
   function pendingLine(): CartItem | null {
     const price = parseAmount(itemPrice);
     const qty = Number(itemQty);
     if (!itemName.trim() || !Number.isFinite(price) || price < 0 || !Number.isFinite(qty) || qty < 1) return null;
-    return { itemId: null, name: itemName.trim(), price, quantity: qty, category: "EQUIPMENT" };
+    const matched = inventory.find((row) => row.name === itemName.trim());
+    return {
+      itemId: matched?.id ?? null,
+      name: itemName.trim(),
+      price,
+      quantity: qty,
+      category: matched?.category ?? "EQUIPMENT",
+    };
   }
 
   function addLine() {
@@ -1916,7 +2265,7 @@ function InvoicePanel({
       customerName,
       customerMobile: mobileDigits(customerMobile),
       sportName: sportName || undefined,
-      courtNames: courtNames ? courtNames.split(",").map((s) => s.trim()).filter(Boolean) : [],
+      courtNames,
       bookingDate,
       startDate,
       endDate,
@@ -1989,7 +2338,7 @@ function InvoicePanel({
       <form className="ops-card" onSubmit={buildPreview}>
         <div className="ops-grid-3">
           <label>Bill #<input type="number" min={1} max={999999} value={billNumber} placeholder="Next bill #" onChange={(e) => setBillNumber(e.target.value)} /></label>
-          <label>Customer<input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required /></label>
+          <label>Customer<input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required autoComplete="off" /></label>
           <label>Mobile
             <input
               value={customerMobile}
@@ -1999,8 +2348,14 @@ function InvoicePanel({
               required
             />
           </label>
-          <label>Sport<input value={sportName} onChange={(e) => setSportName(e.target.value)} /></label>
-          <label>Courts<input value={courtNames} onChange={(e) => setCourtNames(e.target.value)} placeholder="Court 1, Court 2" /></label>
+          <label>Sport
+            <select value={sportName} onChange={(e) => setSportName(e.target.value)}>
+              <option value="">Optional — pick from arena sports</option>
+              {sports.map((sport) => (
+                <option key={sport.id} value={sport.name}>{sport.name}</option>
+              ))}
+            </select>
+          </label>
           <label>Start date<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required /></label>
           <label>End date<input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required /></label>
           <label>Session date<input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} /></label>
@@ -2011,13 +2366,49 @@ function InvoicePanel({
           <label>Advance<input type="text" inputMode="decimal" value={advance} placeholder="Optional" onChange={(e) => setAdvance(sanitizeAmountInput(e.target.value))} /></label>
           <label>Payment
             <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
-              <option value="CASH">Cash</option><option value="ONLINE">Online</option>
+              <option value="CASH">Cash</option>
+              <option value="ONLINE">Online</option>
             </select>
           </label>
         </div>
+
+        {selectedSport ? (
+          <div style={{ marginTop: 12 }}>
+            <p className="ops-muted" style={{ marginBottom: 8 }}>Courts (from {selectedSport.name})</p>
+            <div className="ops-chip-row">
+              {selectedSport.courts.map((court) => (
+                <button
+                  type="button"
+                  key={court.id}
+                  className={selectedCourtIds.includes(court.id) ? "chip active" : "chip"}
+                  onClick={() => toggleCourt(court.id)}
+                >
+                  {court.name}
+                </button>
+              ))}
+              {!selectedSport.courts.length && <p className="ops-muted">No courts configured for this sport.</p>}
+            </div>
+          </div>
+        ) : (
+          <p className="ops-muted" style={{ marginTop: 12 }}>Select a sport to choose courts from your arena setup.</p>
+        )}
+
         <h3>Items (name, price, qty)</h3>
+        {inventory.length > 0 && (
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Add from menu
+            <select defaultValue="" onChange={(e) => { pickInventoryItem(e.target.value); e.target.value = ""; }}>
+              <option value="">Pick an inventory item…</option>
+              {inventory.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · ₹{item.price}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="ops-inline">
-          <input placeholder="Item name" value={itemName} onChange={(e) => setItemName(e.target.value)} />
+          <input placeholder="Item name" value={itemName} onChange={(e) => setItemName(e.target.value)} autoComplete="off" />
           <input placeholder="Price" value={itemPrice} onChange={(e) => setItemPrice(sanitizeAmountInput(e.target.value))} />
           <input placeholder="Qty" value={itemQty} onChange={(e) => setItemQty(e.target.value.replace(/\D/g, ""))} />
           <button type="button" className="primary" onClick={addLine}>Add item</button>
@@ -2049,8 +2440,17 @@ function InvoicePanel({
                 <div className="ops-muted">₹{Number(row.grand_total).toFixed(0)} · {new Date(row.created_at).toLocaleString("en-IN")}</div>
               </div>
               <div className="ops-inline">
-                <button type="button" className="link" onClick={() => { setSavedId(row.id); setPreview(row.payload); }}>Preview</button>
-                <button type="button" className="link" onClick={() => removeSaved(row.id)}>Remove</button>
+                <PreviewEyeButton
+                  onClick={() => {
+                    if (!row.payload) {
+                      window.alert("This saved invoice has no preview data.");
+                      return;
+                    }
+                    setSavedId(row.id);
+                    setPreview(row.payload);
+                  }}
+                />
+                <DeleteButton label="Delete" onClick={() => removeSaved(row.id)} />
               </div>
             </li>
           ))}
@@ -2160,8 +2560,19 @@ function InvoiceView({
           <button type="button" className="primary" disabled={pdfBusy} onClick={() => { void shareWhatsAppPdf(); }}>
             WhatsApp PDF
           </button>
+          {draft.customerMobile ? (
+            <a
+              className="primary"
+              href={`https://wa.me/91${draft.customerMobile.replace(/\D/g, "").slice(-10)}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+            >
+              WhatsApp +91 {draft.customerMobile.replace(/\D/g, "").slice(-10)}
+            </a>
+          ) : null}
           <button type="button" className="primary" onClick={printInvoice}>Print</button>
-          {onRemove && <button type="button" className="link" onClick={() => { void onRemove(); }}>Remove</button>}
+          {onRemove && <DeleteButton label="Delete" onClick={() => onRemove()} />}
         </div>
       </header>
       <div id="printable-invoice" className="ops-card invoice-sheet">
@@ -2180,7 +2591,7 @@ function InvoiceView({
           <div>
             <p className="ops-muted">Bill to</p>
             <strong>{draft.customerName}</strong>
-            {draft.customerMobile && <p>+91 {draft.customerMobile}</p>}
+            {draft.customerMobile && <p><b>Mobile:</b> +91 {draft.customerMobile}</p>}
           </div>
           <div>
             {(draft.startDate || draft.endDate) && (
@@ -2226,6 +2637,7 @@ function InvoiceView({
           <p>Payment: {draft.paymentMode}</p>
         </div>
         <p className="ops-muted">Thank you for choosing {draft.arenaName}!</p>
+        <p className="invoice-powered">Powered by Sportz<span>Arena</span></p>
       </div>
     </div>
   );

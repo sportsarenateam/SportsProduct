@@ -136,6 +136,51 @@ async function requireEntitlement(req: AuthedRequest, res: Response, next: NextF
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+/** Public marketing stats for the landing page (no auth). */
+app.get("/public/landing-stats", async (_req, res) => {
+  try {
+    const [venuesRes, arenasRes, customersRes, posMobilesRes, bookingsRes, invoiceRes] = await Promise.all([
+      db.from("organizations").select("id", { count: "exact", head: true }),
+      db.from("organizations").select("name").order("created_at", { ascending: false }).limit(40),
+      db.from("customers").select("phone"),
+      db.from("pos_transactions").select("customer_mobile"),
+      db.from("pos_transactions").select("id", { count: "exact", head: true }),
+      db.from("generated_invoices").select("customer_mobile"),
+    ]);
+    if (venuesRes.error) throw venuesRes.error;
+    if (arenasRes.error) throw arenasRes.error;
+    if (customersRes.error) throw customersRes.error;
+    if (posMobilesRes.error) throw posMobilesRes.error;
+    if (bookingsRes.error) throw bookingsRes.error;
+    if (invoiceRes.error) throw invoiceRes.error;
+
+    const mobiles = new Set<string>();
+    for (const row of customersRes.data ?? []) {
+      const phone = String((row as { phone?: string }).phone ?? "").replace(/\D/g, "").slice(-10);
+      if (phone.length === 10) mobiles.add(phone);
+    }
+    for (const row of [...(posMobilesRes.data ?? []), ...(invoiceRes.data ?? [])]) {
+      const phone = String((row as { customer_mobile?: string }).customer_mobile ?? "").replace(/\D/g, "").slice(-10);
+      if (phone.length === 10) mobiles.add(phone);
+    }
+
+    const arenas = (arenasRes.data ?? [])
+      .map((row) => String((row as { name?: string }).name ?? "").trim())
+      .filter(Boolean);
+
+    res.json({
+      venues: venuesRes.count ?? 0,
+      customers: mobiles.size,
+      bookings: bookingsRes.count ?? 0,
+      uptime: "99.9%",
+      arenas,
+    });
+  } catch (err) {
+    console.error("landing-stats", err);
+    res.status(500).json({ error: "Unable to load landing stats" });
+  }
+});
+
 async function findAuthUserByEmail(email: string) {
   const normalized = email.toLowerCase();
   for (let page = 1; page <= 10; page += 1) {
@@ -675,16 +720,26 @@ app.post("/subscriptions/verify", express.json(), authenticate, membership, requ
     }
 
     const order = await getCashfreeOrder(cashfreeConfig, input.orderId);
-    const status = String(order.order_status || "").toUpperCase();
-    const paid = ["PAID", "SUCCESS"].includes(status);
+    const cashfreeStatus = String(order.order_status || "UNKNOWN").toUpperCase() || "UNKNOWN";
+    const paid = ["PAID", "SUCCESS"].includes(cashfreeStatus);
     if (!paid) {
       const payments = await getCashfreePayments(cashfreeConfig, input.orderId).catch(() => []);
       const paymentPaid = Array.isArray(payments) && payments.some((p) =>
         ["SUCCESS", "PAID"].includes(String(p.payment_status || "").toUpperCase())
       );
       if (!paymentPaid) {
+        const statusHint = cashfreeStatus === "ACTIVE"
+          ? "ACTIVE means the order is created but not paid yet."
+          : cashfreeStatus === "PENDING"
+            ? "PENDING means Cashfree is still processing the payment."
+            : cashfreeStatus === "EXPIRED"
+              ? "EXPIRED means this checkout timed out — start a new payment."
+              : cashfreeStatus === "FAILED" || cashfreeStatus === "CANCELLED"
+                ? "Payment did not succeed — try again."
+                : "Finish payment in Cashfree, then check status again.";
         return res.status(400).json({
-          error: `Payment not completed yet (status: ${order.order_status || "UNKNOWN"})`,
+          error: `Payment not completed yet (status: ${cashfreeStatus}). ${statusHint}`,
+          cashfreeStatus,
         });
       }
     }

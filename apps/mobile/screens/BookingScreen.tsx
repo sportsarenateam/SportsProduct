@@ -19,14 +19,15 @@ import {
   BackHeader,
   Card,
   Chip,
+  DeleteIconButton,
   ErrorText,
   Field,
   Label,
   Muted,
   PrimaryButton,
   Screen,
-  colors,
 } from "../components/ui";
+import { useTheme } from "../lib/theme";
 
 function hoursBetween(start: string, end: string) {
   const [sh, sm] = start.split(":").map(Number);
@@ -54,6 +55,7 @@ export function BookingScreen({
   onDone: () => void;
   onBack: () => void;
 }) {
+  const { colors: themeColors } = useTheme();
   const today = new Date().toISOString().slice(0, 10);
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
@@ -183,7 +185,7 @@ export function BookingScreen({
       <BackHeader
         title={bevOnly ? "Beverages & Equipment" : `Book ${sport?.name ?? "Sport"}`}
         onBack={onBack}
-        right={<Text style={{ fontWeight: "800", color: "#082b55" }}>₹{grand.toFixed(0)}</Text>}
+        right={<Text style={{ fontWeight: "800", color: themeColors.navy }}>₹{grand.toFixed(0)}</Text>}
       />
 
       {!bevOnly && sport && sportImage(sport.name) ? (
@@ -249,12 +251,12 @@ export function BookingScreen({
           return (
             <View key={item.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontWeight: "700", color: "#082b55" }}>{item.name}</Text>
+                <Text style={{ fontWeight: "700", color: themeColors.navy }}>{item.name}</Text>
                 <Muted>₹{item.price} · stock {item.stock}</Muted>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <Chip label="−" onPress={() => setItemQty(item, qty - 1)} />
-                <Text style={{ fontWeight: "700", minWidth: 18, textAlign: "center" }}>{qty}</Text>
+                <Text style={{ fontWeight: "700", minWidth: 18, textAlign: "center", color: themeColors.text }}>{qty}</Text>
                 <Chip label="+" onPress={() => setItemQty(item, qty + 1)} />
               </View>
             </View>
@@ -283,14 +285,16 @@ export function BookingScreen({
           </>
         )}
         <ErrorText>{error}</ErrorText>
+        <View style={{ marginTop: 8, marginBottom: 28 }}>
         <PrimaryButton label={`Save bill ₹${grand.toFixed(0)}`} busy={busy} onPress={checkout} />
+      </View>
       </Card>
 
       {bevOnly && (
         <Card>
           <Label>Beverages & Equipment sales</Label>
           <Muted>Month filter + Share CSV — same idea as Sales Report.</Muted>
-          <Text style={{ color: colors.navy, fontWeight: "800", marginTop: 8 }}>
+          <Text style={{ color: themeColors.navy, fontWeight: "800", marginTop: 8 }}>
             ₹{itemSalesTotal.toFixed(0)} · {filteredItemBills.length} bills · disc ₹{itemSalesDiscount.toFixed(0)} · adv ₹{itemSalesAdvance.toFixed(0)}
           </Text>
           <Label>Month (YYYY-MM)</Label>
@@ -298,20 +302,20 @@ export function BookingScreen({
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <Chip label="All months" active={!itemMonth} onPress={() => setItemMonth("")} />
             <Pressable onPress={() => { exportItemCsv().catch(() => undefined); }}>
-              <Text style={{ color: colors.navy, fontWeight: "800" }}>Share CSV</Text>
+              <Text style={{ color: themeColors.navy, fontWeight: "800" }}>Share CSV</Text>
             </Pressable>
           </View>
           <Field placeholder="Search customer / bill #" value={itemQuery} onChangeText={setItemQuery} />
           {filteredItemBills.length === 0 && <Muted>No item bills for this period.</Muted>}
           {filteredItemBills.map((row) => (
-            <View key={row.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <Text style={{ color: colors.navy, fontWeight: "700" }}>#{row.bill_number} · {row.customer_name}</Text>
+            <View key={row.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: themeColors.border }}>
+              <Text style={{ color: themeColors.navy, fontWeight: "700" }}>#{row.bill_number} · {row.customer_name}</Text>
               <Muted>
                 ₹{Number(row.grand_total || 0).toFixed(0)} · {row.payment_mode}
                 {Number(row.discount || 0) > 0 ? ` · disc ₹${Number(row.discount).toFixed(0)}` : ""}
                 {Number(row.advance || 0) > 0 ? ` · adv ₹${Number(row.advance).toFixed(0)}` : ""}
               </Muted>
-              <Pressable onPress={() => {
+              <DeleteIconButton onPress={() => {
                 Alert.alert("Delete?", "Delete this bill?", [
                   { text: "Cancel", style: "cancel" },
                   {
@@ -324,9 +328,7 @@ export function BookingScreen({
                     },
                   },
                 ]);
-              }}>
-                <Text style={{ color: colors.danger, fontWeight: "700", marginTop: 6 }}>Delete</Text>
-              </Pressable>
+              }} />
             </View>
           ))}
         </Card>

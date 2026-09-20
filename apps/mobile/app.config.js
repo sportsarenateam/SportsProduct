@@ -16,6 +16,7 @@ if (fs.existsSync(rootEnvPath)) {
 }
 
 const port = process.env.PORT || "4000";
+const isProd = process.env.APP_ENV === "production";
 
 /** Fix common typos: http:192... or http://192.168.1.9.4000 */
 function normalizeApiUrl(raw) {
@@ -26,9 +27,12 @@ function normalizeApiUrl(raw) {
   return value.replace(/\/$/, "");
 }
 
-const apiUrl = normalizeApiUrl(
-  process.env.API_URL || process.env.EXPO_PUBLIC_API_URL || `http://localhost:${port}`,
-);
+// Production / preview builds always hit the live API (no LAN override baked in).
+const apiUrl = isProd || process.env.APP_ENV === "preview"
+  ? normalizeApiUrl(process.env.API_URL || "https://api.sportsarena.team")
+  : normalizeApiUrl(
+      process.env.API_URL || process.env.EXPO_PUBLIC_API_URL || `http://localhost:${port}`,
+    );
 
 module.exports = {
   expo: {
@@ -37,30 +41,51 @@ module.exports = {
     version: "0.1.0",
     orientation: "portrait",
     userInterfaceStyle: "light",
-    icon: "./assets/sportzarena-logo.png",
+    icon: "./assets/icon.png",
     splash: {
-      image: "./assets/sportzarena-logo.png",
+      image: "./assets/splash-icon.png",
       resizeMode: "contain",
-      backgroundColor: "#061f3d",
+      backgroundColor: "#041628",
     },
     android: {
       package: "com.sportzarena.app",
-      usesCleartextTraffic: true,
+      adaptiveIcon: {
+        foregroundImage: "./assets/adaptive-icon.png",
+        backgroundColor: "#041628",
+      },
+      // Cleartext only for local/dev LAN APIs — disabled in production store builds.
+      usesCleartextTraffic: !isProd,
     },
     ios: {
       bundleIdentifier: "com.sportzarena.app",
       infoPlist: {
         NSAppTransportSecurity: {
-          NSAllowsArbitraryLoads: true,
-          NSAllowsLocalNetworking: true,
+          NSAllowsArbitraryLoads: !isProd,
+          NSAllowsLocalNetworking: !isProd,
         },
       },
     },
-    plugins: ["expo-asset", "expo-font"],
+    plugins: [
+      "expo-asset",
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-splash-screen",
+        {
+          backgroundColor: "#041628",
+          image: "./assets/splash-icon.png",
+          imageWidth: 200,
+        },
+      ],
+    ],
     extra: {
       supabaseUrl: process.env.SUPABASE_URL ?? "",
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
       apiUrl,
+      appEnv: process.env.APP_ENV || "development",
+      eas: {
+        projectId: process.env.EAS_PROJECT_ID || undefined,
+      },
     },
   },
 };

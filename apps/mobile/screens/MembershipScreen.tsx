@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { opsRequest } from "../lib/api";
 import {
@@ -10,10 +10,12 @@ import {
   sanitizeMobileInput,
 } from "../lib/opsHelpers";
 import type { SportConfig } from "../lib/types";
+import { useTheme } from "../lib/theme";
 import {
   BackHeader,
   Card,
   Chip,
+  DeleteIconButton,
   ErrorText,
   Field,
   Label,
@@ -33,6 +35,7 @@ export function MembershipScreen({
   sports: SportConfig[];
   onBack: () => void;
 }) {
+  const { colors: themeColors } = useTheme();
   const today = new Date().toISOString().slice(0, 10);
   const [entries, setEntries] = useState<any[]>([]);
   const [customerName, setCustomerName] = useState("");
@@ -100,6 +103,21 @@ export function MembershipScreen({
     }
   }
 
+  function confirmDelete(entry: { id: string; customer_name: string }) {
+    Alert.alert("Delete?", `Delete membership for ${entry.customer_name}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          opsRequest(session, arenaId, `/ops/membership-billing/${entry.id}`, { method: "DELETE" })
+            .then(() => load())
+            .catch((err) => setError(err instanceof Error ? err.message : "Delete failed"));
+        },
+      },
+    ]);
+  }
+
   return (
     <Screen>
       <BackHeader title="Membership" onBack={onBack} />
@@ -155,12 +173,18 @@ export function MembershipScreen({
         <Label>Recent</Label>
         {entries.length === 0 && <Muted>No membership bills yet.</Muted>}
         {entries.slice(0, 20).map((entry) => (
-          <View key={entry.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }}>
-            <Text style={{ fontWeight: "700" }}>{entry.customer_name} · #{entry.bill_number}</Text>
+          <View
+            key={entry.id}
+            style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: themeColors.border }}
+          >
+            <Text style={{ fontWeight: "700", color: themeColors.text }}>
+              {entry.customer_name} · #{entry.bill_number}
+            </Text>
             <Muted>
               {entry.start_date || "—"} → {entry.end_date || "—"} · {entry.timing} · ₹{Number(entry.amount).toFixed(0)}
             </Muted>
             {entry.customer_mobile ? <Muted>+91 {entry.customer_mobile}</Muted> : null}
+            <DeleteIconButton onPress={() => confirmDelete(entry)} />
           </View>
         ))}
       </Card>

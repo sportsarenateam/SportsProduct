@@ -5,9 +5,9 @@ import { assertPasswordStrength, PASSWORD_HINT } from "../lib/opsHelpers";
 import {
   Card,
   ErrorText,
-  Field,
   Label,
   Muted,
+  PasswordField,
   PrimaryButton,
   Screen,
   Title,
@@ -53,9 +53,9 @@ export function SetPasswordScreen({ onDone }: { onDone: (session: Session) => vo
       <Muted>{PASSWORD_HINT}</Muted>
       <Card>
         <Label>New password</Label>
-        <Field secureTextEntry value={password} onChangeText={setPassword} placeholder="Strong password" />
+        <PasswordField value={password} onChangeText={setPassword} placeholder="Strong password" />
         <Label>Confirm password</Label>
-        <Field secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
+        <PasswordField value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
         <ErrorText>{error}</ErrorText>
         <PrimaryButton label="Save password" busy={busy} onPress={save} />
       </Card>

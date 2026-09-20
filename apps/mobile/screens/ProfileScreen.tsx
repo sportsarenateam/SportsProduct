@@ -13,9 +13,12 @@ import {
   Label,
   LinkButton,
   Muted,
+  PasswordField,
   PrimaryButton,
   Screen,
+  SecondaryButton,
 } from "../components/ui";
+import { useTheme } from "../lib/theme";
 
 type StaffRow = {
   userId: string;
@@ -30,13 +33,16 @@ export function ProfileScreen({
   role,
   onBack,
   onSaved,
+  onLogout,
 }: {
   session: Session;
   arena: Arena;
   role: AppRole;
   onBack: () => void;
   onSaved: (next: Partial<Arena>) => void;
+  onLogout: () => void;
 }) {
+  const { colors: themeColors } = useTheme();
   const isOwner = role === "owner";
   const [name, setName] = useState(arena.name);
   const [address, setAddress] = useState(arena.address ?? "");
@@ -218,17 +224,17 @@ export function ProfileScreen({
       </Card>
 
       <Card>
-        <Text style={{ fontWeight: "700", color: "#082b55", fontSize: 16 }}>Change password</Text>
+        <Text style={{ fontWeight: "700", color: themeColors.navy, fontSize: 16 }}>Change password</Text>
         <Muted>
           Use current password when you still remember it. If you forgot it, use Forgot password on login (OTP).
         </Muted>
         <Muted>{PASSWORD_HINT}</Muted>
         <Label>Current password</Label>
-        <Field secureTextEntry value={oldPassword} onChangeText={setOldPassword} placeholder="Current password" />
+        <PasswordField value={oldPassword} onChangeText={setOldPassword} placeholder="Current password" />
         <Label>New password</Label>
-        <Field secureTextEntry value={newPassword} onChangeText={setNewPassword} placeholder="New password" />
+        <PasswordField value={newPassword} onChangeText={setNewPassword} placeholder="New password" />
         <Label>Confirm new password</Label>
-        <Field secureTextEntry value={confirmNewPassword} onChangeText={setConfirmNewPassword} placeholder="Confirm new password" />
+        <PasswordField value={confirmNewPassword} onChangeText={setConfirmNewPassword} placeholder="Confirm new password" />
         <ErrorText>{pwdError}</ErrorText>
         {pwdSaved ? <Muted>Password updated.</Muted> : null}
         <PrimaryButton label="Update password" busy={pwdBusy} onPress={changePassword} />
@@ -236,7 +242,7 @@ export function ProfileScreen({
 
       {isOwner ? (
         <Card>
-          <Text style={{ fontWeight: "700", color: "#082b55", fontSize: 16 }}>Staff</Text>
+          <Text style={{ fontWeight: "700", color: themeColors.navy, fontSize: 16 }}>Staff</Text>
           <Muted>They log in on this same app with Email OTP, then set a password.</Muted>
           <Label>Staff email</Label>
           <Field
@@ -267,11 +273,11 @@ export function ProfileScreen({
                 gap: 12,
                 paddingVertical: 8,
                 borderBottomWidth: 1,
-                borderBottomColor: "#e2e8f0",
+                borderBottomColor: themeColors.border,
               }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={{ fontWeight: "700", color: "#082b55" }}>{row.fullName || row.email}</Text>
+                <Text style={{ fontWeight: "700", color: themeColors.navy }}>{row.fullName || row.email}</Text>
                 <Muted>{row.email}</Muted>
               </View>
               <LinkButton label="Remove" onPress={() => removeStaff(row.userId)} />
@@ -279,6 +285,12 @@ export function ProfileScreen({
           ))}
         </Card>
       ) : null}
+
+      <Card>
+        <Text style={{ fontWeight: "700", color: themeColors.navy, fontSize: 16 }}>Account</Text>
+        <Muted>{session.user.email}</Muted>
+        <SecondaryButton label="Log out" onPress={onLogout} />
+      </Card>
     </Screen>
   );
 }

@@ -1,20 +1,28 @@
 import { useState } from "react";
-import { Image, View } from "react-native";
+import {
+  ImageBackground,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 import { getApiUrl, publicRequest } from "../lib/api";
 import { supabase } from "../lib/supabase";
+import { useTheme } from "../lib/theme";
 import {
-  Card,
   Chip,
   ErrorText,
   Field,
-  Kicker,
   Label,
   LinkButton,
   Muted,
+  PasswordField,
   PrimaryButton,
-  Screen,
   Title,
 } from "../components/ui";
 
@@ -38,7 +46,8 @@ export function LoginScreen({
   onBack?: () => void;
   onForgotPassword?: () => void;
 }) {
-  const [tab, setTab] = useState<"otp" | "password">("otp");
+  const { colors: themeColors } = useTheme();
+  const [tab, setTab] = useState<"otp" | "password">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -59,10 +68,7 @@ export function LoginScreen({
     try {
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: normalized,
-        options: {
-          // Same as web: OTP can create the Auth user; arena/password come after.
-          shouldCreateUser: true,
-        },
+        options: { shouldCreateUser: true },
       });
       if (otpError) throw otpError;
       setCodeSent(true);
@@ -108,7 +114,6 @@ export function LoginScreen({
     setBusy(true);
     setError("");
     try {
-      // Same as web — soft-fail if phone cannot reach LAN API yet.
       let hasPassword: boolean | undefined;
       try {
         const status = await publicRequest<{ exists?: boolean; hasPassword?: boolean }>(
@@ -123,7 +128,6 @@ export function LoginScreen({
         if (statusErr instanceof Error && /No account found/i.test(statusErr.message)) {
           throw statusErr;
         }
-        // Continue — Supabase password login still works without email-status.
       }
 
       const result = await supabase.auth.signInWithPassword({
@@ -155,110 +159,187 @@ export function LoginScreen({
   }
 
   return (
-    <Screen navy>
+    <View style={styles.root}>
       <StatusBar style="light" />
-      <Image
-        source={require("../assets/sportzarena-logo.png")}
-        style={{ width: 168, height: 72, alignSelf: "flex-start" }}
-        resizeMode="contain"
-      />
-      <Kicker>SPORTZARENA</Kicker>
-      <Title light>Welcome back</Title>
-      <Muted light>
-        {tab === "otp"
-          ? (codeSent
-            ? `Enter the code sent to ${email}`
-            : "Enter your email for a one-time code. New owners start here too.")
-          : "Sign in with the password you created after OTP."}
-      </Muted>
-      {onBack ? <LinkButton label="← SportzArena" onPress={onBack} light /> : null}
-
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <Chip
-          label="Email OTP"
-          active={tab === "otp"}
-          onPress={() => { setTab("otp"); setError(""); setMessage(""); }}
+      <ImageBackground
+        source={require("../assets/sportzarena-login-bg.png")}
+        style={styles.bg}
+        imageStyle={styles.bgImage}
+      >
+        <LinearGradient
+          colors={["rgba(4,22,40,0.72)", "rgba(4,22,40,0.55)", "rgba(4,22,40,0.88)"]}
+          locations={[0, 0.35, 1]}
+          style={StyleSheet.absoluteFill}
         />
-        <Chip
-          label="Password"
-          active={tab === "password"}
-          onPress={() => { setTab("password"); setError(""); setMessage(""); setCodeSent(false); }}
-        />
-      </View>
+        <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+          {onBack ? (
+            <Pressable onPress={onBack} style={styles.backRow} hitSlop={8}>
+              <Ionicons name="chevron-back" size={20} color="#fff" />
+              <Text style={styles.backText}>Back</Text>
+            </Pressable>
+          ) : null}
 
-      <Card>
-        <Label>Email</Label>
-        <Field
-          autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          placeholder="you@yourarena.com"
-          value={email}
-          onChangeText={setEmail}
-          editable={!busy && !(tab === "otp" && codeSent)}
-        />
+          <View style={styles.card}>
+            <Title>Welcome back! 👋</Title>
+            <Muted>
+              {tab === "otp"
+                ? (codeSent
+                  ? `Enter the code sent to ${email}`
+                  : "New here? Use Email OTP — returning users should use Password.")
+                : "Log in to your account to manage your sports venue."}
+            </Muted>
 
-        {tab === "password" ? (
-          <>
-            <Label>Password</Label>
-            <Field
-              secureTextEntry
-              autoComplete="password"
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              editable={!busy}
-            />
-            <LinkButton label="Forgot password?" onPress={() => onForgotPassword?.()} />
-          </>
-        ) : null}
+            <View style={styles.tabs}>
+              <Chip
+                label="Password"
+                active={tab === "password"}
+                onPress={() => { setTab("password"); setError(""); setMessage(""); setCodeSent(false); }}
+              />
+              <Chip
+                label="Email OTP"
+                active={tab === "otp"}
+                onPress={() => { setTab("otp"); setError(""); setMessage(""); }}
+              />
+            </View>
 
-        {tab === "otp" && codeSent ? (
-          <>
-            <Label>OTP code</Label>
-            <Field
-              keyboardType="number-pad"
-              maxLength={8}
-              placeholder="••••••"
-              value={code}
-              onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 8))}
-              editable={!busy}
-            />
-          </>
-        ) : null}
+            <View style={styles.form}>
+              <Label>Email</Label>
+              <View style={styles.inputWrap}>
+                <Ionicons name="mail-outline" size={18} color={themeColors.faint} style={styles.inputIcon} />
+                <Field
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  placeholder=""
+                  value={email}
+                  onChangeText={setEmail}
+                  editable={!busy && !(tab === "otp" && codeSent)}
+                  style={styles.inputWithIcon}
+                />
+              </View>
 
-        {message ? <Muted>{message}</Muted> : null}
-        <ErrorText>{error}</ErrorText>
+              {tab === "password" ? (
+                <>
+                  <Label>Password</Label>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="lock-closed-outline" size={18} color={themeColors.faint} style={styles.inputIcon} />
+                    <PasswordField
+                      autoComplete="password"
+                      placeholder=""
+                      value={password}
+                      onChangeText={setPassword}
+                      editable={!busy}
+                      style={styles.inputWithIcon}
+                    />
+                  </View>
+                  <View style={styles.forgotRow}>
+                    <LinkButton label="Forgot Password?" onPress={() => onForgotPassword?.()} />
+                  </View>
+                </>
+              ) : null}
 
-        {tab === "password" ? (
-          <PrimaryButton label="Log in with password" busy={busy} onPress={passwordLogin} />
-        ) : (
-          <PrimaryButton
-            label={codeSent ? "Verify OTP" : "Send OTP"}
-            busy={busy}
-            onPress={codeSent ? verifyOtp : sendOtp}
-          />
-        )}
+              {tab === "otp" && codeSent ? (
+                <>
+                  <Label>OTP code</Label>
+                  <Field
+                    keyboardType="number-pad"
+                    maxLength={8}
+                    placeholder="••••••"
+                    value={code}
+                    onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 8))}
+                    editable={!busy}
+                  />
+                </>
+              ) : null}
 
-        {tab === "otp" && codeSent ? (
-          <>
-            <LinkButton
-              label="Resend OTP"
-              onPress={async () => {
-                setCode("");
-                setMessage("");
-                await sendOtp();
-              }}
-            />
-            <LinkButton
-              label="Change email"
-              onPress={() => { setCodeSent(false); setCode(""); setMessage(""); setError(""); }}
-            />
-          </>
-        ) : null}
-      </Card>
+              {message ? <Muted>{message}</Muted> : null}
+              <ErrorText>{error}</ErrorText>
 
-      <Muted light>Staff: use the email your owner invited, then Email OTP or Password.</Muted>
-    </Screen>
+              {tab === "password" ? (
+                <PrimaryButton label="Login →" busy={busy} onPress={passwordLogin} />
+              ) : (
+                <PrimaryButton
+                  label={codeSent ? "Verify OTP" : "Send OTP"}
+                  busy={busy}
+                  onPress={codeSent ? verifyOtp : sendOtp}
+                />
+              )}
+
+              {tab === "otp" && codeSent ? (
+                <View style={styles.otpLinks}>
+                  <LinkButton
+                    label="Resend OTP"
+                    onPress={async () => {
+                      setCode("");
+                      setMessage("");
+                      await sendOtp();
+                    }}
+                  />
+                  <LinkButton
+                    label="Change email"
+                    onPress={() => { setCodeSent(false); setCode(""); setMessage(""); setError(""); }}
+                  />
+                </View>
+              ) : null}
+            </View>
+
+            {tab === "password" ? (
+              <Pressable
+                onPress={() => { setTab("otp"); setError(""); setMessage(""); }}
+                style={styles.otpSwitch}
+              >
+                <Text style={[styles.otpSwitchText, { color: themeColors.text }]}>Prefer Email OTP?</Text>
+              </Pressable>
+            ) : null}
+
+            <View style={styles.footer}>
+              <Text style={[styles.footerText, { color: themeColors.muted }]}>Don&apos;t have an account? </Text>
+              <LinkButton
+                label="Start Free Trial"
+                onPress={() => { setTab("otp"); setError(""); setMessage(""); setCodeSent(false); }}
+              />
+            </View>
+          </View>
+        </SafeAreaView>
+      </ImageBackground>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#041628" },
+  bg: { flex: 1 },
+  bgImage: { resizeMode: "cover" },
+  safe: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+    justifyContent: "center",
+  },
+  backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: 12 },
+  backText: { fontSize: 14, fontWeight: "700", color: "#fff" },
+  card: {
+    borderRadius: 20,
+    padding: 18,
+    gap: 12,
+    backgroundColor: "rgba(255,255,255,0.95)",
+  },
+  tabs: { flexDirection: "row", gap: 8, justifyContent: "center" },
+  form: { gap: 10 },
+  inputWrap: { position: "relative", justifyContent: "center" },
+  inputIcon: { position: "absolute", left: 14, zIndex: 2 },
+  inputWithIcon: { paddingLeft: 42 },
+  forgotRow: { alignItems: "flex-end", marginTop: -4 },
+  otpLinks: { gap: 4 },
+  otpSwitch: { alignItems: "center", paddingVertical: 4 },
+  otpSwitchText: { fontSize: 13, fontWeight: "700" },
+  footer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  footerText: { fontSize: 13, fontWeight: "600" },
+});

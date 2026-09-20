@@ -36,6 +36,16 @@ type Arena = {
 const navigate = (path: string) => { window.history.pushState({}, "", path); window.dispatchEvent(new PopStateEvent("popstate")); };
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
+function formatLandingCount(n: number) {
+  if (!Number.isFinite(n) || n < 0) return "0+";
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M+`;
+  }
+  if (n >= 1_000) return `${Math.floor(n).toLocaleString("en-IN")}+`;
+  return `${Math.floor(n)}+`;
+}
+
 /** OTP-created users must set a password once before password login works. */
 function userNeedsPasswordSetup(user: User | null | undefined) {
   return Boolean(user) && user!.user_metadata?.password_set !== true;
@@ -113,7 +123,7 @@ function PasswordInput({
           onClick={() => setShow((v) => !v)}
           aria-label={show ? "Hide password" : "Show password"}
         >
-          {show ? "Hide" : "Show"}
+          {show ? "🙈" : "👁"}
         </button>
       </span>
     </label>
@@ -450,8 +460,26 @@ export function App() {
     }} />;
   }
   if (path === "/signup") {
-    navigate("/login");
-    return <main className="auth-page"><p>Taking you to login…</p></main>;
+    if (session) {
+      return <main className="auth-page"><p>Taking you to your arena…</p></main>;
+    }
+    return (
+      <AuthForm
+        mode="signup"
+        onSession={(next) => {
+          setSession(next);
+          bootstrappedFor.current = null;
+          setBootstrapDone(false);
+        }}
+        onRegistered={(nextArena, userId) => {
+          setArena(nextArena);
+          cacheArena(userId, nextArena);
+          setSports([]);
+          cacheSports(userId, []);
+          setRole("owner");
+        }}
+      />
+    );
   }
   if (!session) {
     return <main className="auth-page"><p>Redirecting to login…</p></main>;
@@ -581,6 +609,149 @@ function useRevealOnScroll() {
   }, []);
 }
 
+function useCountUp(target: number, durationMs = 1600, runId = 0) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (runId < 1) {
+      setValue(0);
+      return;
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setValue(target);
+      return;
+    }
+    setValue(0);
+    let frame = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - (1 - progress) ** 3;
+      setValue(Math.round(target * eased));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, durationMs, runId]);
+  return value;
+}
+
+function HeroDashboardPreview({ highlightToken = 0 }: { highlightToken?: number }) {
+  const [runId, setRunId] = useState(0);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const revenue = useCountUp(48250, 1800, runId);
+  const bookings = useCountUp(36, 1400, runId);
+  const members = useCountUp(28, 1500, runId);
+  const active = runId > 0;
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    let intervalId = 0;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        setRunId(1);
+        intervalId = window.setInterval(() => {
+          setRunId((n) => n + 1);
+        }, 9000);
+        observer.disconnect();
+      },
+      { threshold: 0.2 },
+    );
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!highlightToken) return;
+    setRunId((n) => Math.max(1, n + 1));
+    rootRef.current?.classList.add("is-demo-focus");
+    const t = window.setTimeout(() => rootRef.current?.classList.remove("is-demo-focus"), 1800);
+    return () => window.clearTimeout(t);
+  }, [highlightToken]);
+
+  return (
+    <div className="lp-hero-visual anim-fade-up" style={{ animationDelay: "180ms" }} ref={rootRef} id="demo">
+      <div className="lp-laptop-shell" aria-hidden="true">
+        <div className="lp-laptop-lid">
+          <div className="lp-laptop-camera" />
+          <div className="lp-laptop-screen">
+            <div className="lp-device-desk lp-device-desk-live">
+              <div className="lp-desk-chrome">
+                <span /><span /><span />
+                <em>app.sportsarena.team</em>
+              </div>
+              <div className="lp-desk-body">
+                <aside className="lp-desk-side">
+                  <b>Dashboard</b>
+                  <span>Bookings</span>
+                  <span>Sales</span>
+                  <span>Membership</span>
+                  <span>Invoice</span>
+                </aside>
+                <div className="lp-desk-main">
+                  <p className="lp-desk-hello">Welcome back 👋</p>
+                  <div className="lp-desk-kpis">
+                    <article>
+                      <small>Revenue</small>
+                      <strong>₹{revenue.toLocaleString("en-IN")}</strong>
+                    </article>
+                    <article>
+                      <small>Bookings</small>
+                      <strong>{bookings}</strong>
+                    </article>
+                    <article>
+                      <small>Members</small>
+                      <strong>{members}</strong>
+                    </article>
+                  </div>
+                  <div className="lp-desk-charts">
+                    <div className={`lp-chart-line ${active ? "is-running" : ""}`} />
+                    <div className={`lp-chart-donut ${active ? "is-running" : ""}`} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="lp-laptop-base">
+          <div className="lp-laptop-notch" />
+        </div>
+      </div>
+
+      <div className="lp-device-phone lp-device-phone-live">
+        <div className="lp-phone-notch" />
+        <p>Good Morning</p>
+        <div className="lp-phone-kpis">
+          <span>₹{Math.round(revenue / 1000)}k</span>
+          <span>{bookings}</span>
+        </div>
+        <div className={`lp-phone-bars ${active ? "is-running" : ""}`}>
+          <i /><i /><i /><i /><i /><i /><i />
+        </div>
+      </div>
+
+      <div className="lp-hero-sports">
+        {[
+          { name: "Badminton", image: badmintonIcon },
+          { name: "Carrom", image: carromIcon },
+          { name: "Skating", image: skatingIcon },
+          { name: "Volleyball", image: volleyballIcon },
+        ].map((sport) => (
+          <article key={sport.name}>
+            <span className="lp-sport-icon"><img src={sport.image} alt="" /></span>
+            <b>{sport.name}</b>
+          </article>
+        ))}
+      </div>
+      <p className="lp-script">More Sports More Possibilities</p>
+    </div>
+  );
+}
+
 function useAnimatedPrice(target: number) {
   const [value, setValue] = useState(target);
   const valueRef = useRef(target);
@@ -629,9 +800,9 @@ function PlanCard({
       <h3>{plan.name}</h3>
       <p>{plan.detail}</p>
       <h2 className="plan-price">₹{animatedPrice}<small>/month</small></h2>
-      <p className="billing-note">Billed monthly · Cancel anytime</p>
+      <p className="billing-note">Billed monthly · One arena</p>
       <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
-      <button type="button" className="primary" onClick={() => navigate("/login")}>
+      <button type="button" className="primary" onClick={() => navigate("/signup")}>
         Start 30-day free trial
       </button>
     </article>
@@ -640,6 +811,83 @@ function PlanCard({
 
 function Landing() {
   useRevealOnScroll();
+  const [landingStats, setLandingStats] = useState({
+    venues: "—",
+    customers: "—",
+    bookings: "—",
+    uptime: "99.9%",
+  });
+  const [arenaNames, setArenaNames] = useState<string[]>([]);
+  const [arenaIndex, setArenaIndex] = useState(0);
+  const [demoPulse, setDemoPulse] = useState(0);
+
+  function watchDemo() {
+    const el = document.getElementById("demo");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      setDemoPulse((n) => n + 1);
+      return;
+    }
+    window.location.hash = "demo";
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiUrl}/public/landing-stats`);
+        if (!res.ok) throw new Error("stats failed");
+        const data = await res.json() as {
+          venues?: number;
+          customers?: number;
+          bookings?: number;
+          uptime?: string;
+          arenas?: string[];
+        };
+        if (cancelled) return;
+        setLandingStats({
+          venues: formatLandingCount(Number(data.venues ?? 0)),
+          customers: formatLandingCount(Number(data.customers ?? 0)),
+          bookings: formatLandingCount(Number(data.bookings ?? 0)),
+          uptime: data.uptime || "99.9%",
+        });
+        setArenaNames(
+          Array.isArray(data.arenas)
+            ? [...new Set(data.arenas.map((n) => String(n).trim()).filter(Boolean))]
+            : [],
+        );
+        setArenaIndex(0);
+      } catch {
+        if (!cancelled) {
+          setLandingStats({
+            venues: "—",
+            customers: "—",
+            bookings: "—",
+            uptime: "99.9%",
+          });
+          setArenaNames([]);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (arenaNames.length < 2) return;
+    const timer = window.setInterval(() => {
+      setArenaIndex((i) => (i + 1) % arenaNames.length);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [arenaNames]);
+
+  const arenaMarqueeLoop = (() => {
+    if (!arenaNames.length) return [] as string[];
+    const copiesNeeded = Math.max(8, Math.ceil(16 / arenaNames.length));
+    const half = Array.from({ length: copiesNeeded }, () => arenaNames).flat();
+    return [...half, ...half];
+  })();
+  const arenaMarqueeDuration = Math.max(28, Math.round(arenaMarqueeLoop.length * 1.1));
+
   const plans = [
     {
       name: "Starter",
@@ -655,95 +903,176 @@ function Landing() {
       featured: true,
     },
   ];
-  const activityIcons = [
-    { name: "Cricket Turf", image: cricketIcon },
-    { name: "Badminton", image: badmintonIcon },
-    { name: "Football", image: footballIcon },
-    { name: "Pickleball", image: pickleballIcon },
-    { name: "Table Tennis", image: tableTennisIcon },
-    { name: "Skating", image: skatingIcon },
-    { name: "Volleyball", image: volleyballIcon },
+  const features = [
+    { title: "Easy Bookings", text: "Book courts in seconds with rates, slots, and walk-in billing in one flow.", icon: "📅" },
+    { title: "Customer Management", text: "Keep members, coaching, and walk-ins organized with clear records.", icon: "👥" },
+    { title: "Billing & Payments", text: "Collect cash or online, apply discounts, and share WhatsApp receipts.", icon: "₹" },
+    { title: "Track Profit & Expenses", text: "See revenue by sport, coaching, membership, and items at a glance.", icon: "📊" },
+    { title: "Manage Arenas & Courts", text: "Configure sports, courts, and hourly rates for your arena layout.", icon: "🏟️" },
+    { title: "Access Anywhere", text: "Run the same ops on phone or desktop — owners and staff stay in sync.", icon: "📱" },
   ];
 
   return (
-    <main className="landing">
-      <nav>
-        <Brand />
+    <main className="landing landing-v2">
+      <nav className="landing-nav">
+        <a className="landing-brand" href="/" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+          <img className="brand-logo" src={sportzArenaLogo} alt="" />
+          <span className="landing-brand-text">
+            <span>Sportz</span><span className="accent">Arena</span>
+          </span>
+        </a>
+        <div className="landing-nav-links">
+          <a className="is-active" href="#home">Home</a>
+          <a href="#features">Features</a>
+          <a href="#plans">Pricing</a>
+          <a href="#about">About Us</a>
+          <a href="#contact">Contact</a>
+        </div>
         <div className="landing-nav-actions">
           <ThemeToggle />
-          <button className="link" onClick={() => document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" })}>Pricing</button>
-          <button className="link" onClick={() => navigate("/login")}>Log in</button>
-          <button className="primary" onClick={() => navigate("/login")}>Start free</button>
+          <button type="button" className="btn-ghost" onClick={() => navigate("/login")}>Login</button>
+          <button type="button" className="primary" onClick={() => navigate("/signup")}>Get Started Free</button>
         </div>
       </nav>
 
-      <section className="hero">
-        <div className="hero-media" aria-hidden="true">
-          <img src={sportzArenaBackground} alt="" />
+      <section className="lp-hero" id="home">
+        <div className="lp-hero-glow lp-hero-glow-a" aria-hidden="true" />
+        <div className="lp-hero-glow lp-hero-glow-b" aria-hidden="true" />
+        <div className="lp-hero-inner">
+          <div className="lp-hero-copy">
+            <p className="lp-badge anim-fade-up">All-in-One Sports Venue Management</p>
+            <h1 className="anim-fade-up" style={{ animationDelay: "80ms" }}>
+              Manage Your <span className="accent">Sports Arena</span> Business
+            </h1>
+            <p className="lp-lead anim-fade-up" style={{ animationDelay: "160ms" }}>
+              Court bookings, invoices, coaching, memberships, and sales — one workspace built for Indian sports arenas.
+            </p>
+            <div className="lp-hero-actions anim-fade-up" style={{ animationDelay: "240ms" }}>
+              <button type="button" className="primary large" onClick={() => navigate("/signup")}>
+                Get Started Free →
+              </button>
+              <button
+                type="button"
+                className="btn-ghost large"
+                onClick={watchDemo}
+              >
+                ▶ Watch Demo
+              </button>
+            </div>
+            {arenaNames.length > 0 && (
+              <div className="lp-arena-ticker lp-arena-ticker-hero anim-fade-up" style={{ animationDelay: "280ms" }} aria-live="polite">
+                <p className="lp-arena-ticker-label">Partner arenas on SportzArena</p>
+                <div className="lp-arena-ticker-window">
+                  <div
+                    className="lp-arena-ticker-track"
+                    style={{ transform: `translateY(-${arenaIndex * 100}%)` }}
+                  >
+                    {arenaNames.map((name, i) => (
+                      <div key={`hero-${name}-${i}`} className="lp-arena-ticker-item">
+                        <strong>{name}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <ul className="lp-trust anim-fade-up" style={{ animationDelay: "320ms" }}>
+              <li>No credit card required</li>
+              <li>Easy setup</li>
+              <li>30-day free trial</li>
+            </ul>
+          </div>
+
+          <HeroDashboardPreview highlightToken={demoPulse} />
         </div>
-        <div className="hero-copy">
-          <p className="brand-wordmark anim-fade-up" style={{ animationDelay: "60ms" }}>SportzArena</p>
-          <h1 className="anim-fade-up" style={{ animationDelay: "160ms" }}>Bill. Manage. Grow.</h1>
-          <p className="hero-lead anim-fade-up" style={{ animationDelay: "260ms" }}>
-            Court bookings, invoices, coaching and sales — one workspace built for Indian sports arenas.
-          </p>
-          <div className="hero-actions anim-fade-up" style={{ animationDelay: "360ms" }}>
-            <button className="primary large cta-pulse" onClick={() => navigate("/login")}>
-              Start 30-day free trial <span className="cta-arrow">→</span>
-            </button>
-            <button className="hero-link" onClick={() => document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" })}>
-              See pricing
-            </button>
+      </section>
+
+      <section className="lp-features" id="features">
+        <p className="eyebrow" data-reveal>Features</p>
+        <h2 data-reveal>Everything You Need to Run Your Sports Arena</h2>
+        <p className="section-lead" data-reveal>From court booking to sales reports — tools that match how arenas actually operate.</p>
+        <div className="lp-feature-grid">
+          {features.map((feature, index) => (
+            <article key={feature.title} data-reveal style={{ transitionDelay: `${index * 70}ms` }}>
+              <span className="lp-feature-icon" aria-hidden="true">{feature.icon}</span>
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="lp-about" id="about">
+        <div className="lp-about-media" data-reveal>
+          <img src={sportzArenaBackground} alt="Indoor sports court" />
+          <div className="lp-about-overlay">
+            <p>Built for Sports Venue Owners</p>
+            <button type="button" className="primary" onClick={() => navigate("/signup")}>Get Started Free →</button>
           </div>
         </div>
-      </section>
-
-      <section className="landing-section">
-        <p className="eyebrow" data-reveal>Sports you already run</p>
-        <h2 data-reveal>Turf, courts, and classes in one place</h2>
-        <p className="section-lead" data-reveal>Switch sports without switching tools — rates, courts, and bills stay together.</p>
-        <div className="landing-sports">
-          {activityIcons.map((sport, index) => (
-            <article key={sport.name} data-reveal style={{ transitionDelay: `${index * 70}ms` }}>
-              <img src={sport.image} alt="" />
-              <b>{sport.name}</b>
-            </article>
-          ))}
-          <article className="more-sports" data-reveal style={{ transitionDelay: `${activityIcons.length * 70}ms` }}>
-            <strong>+</strong>
-            <b>Carrom, skating & more</b>
-          </article>
-        </div>
-      </section>
-
-      <section className="landing-section" id="how-it-works">
-        <p className="eyebrow" data-reveal>How it works</p>
-        <h2 data-reveal>Live in minutes. Pay after your trial.</h2>
-        <p className="section-lead" data-reveal>No card required to start. Keep working for 30 days, then continue with a simple monthly plan.</p>
-        <div className="feature-grid">
+        <div className="lp-stats" data-reveal>
           {[
-            { title: "1. Verify email", text: "OTP login, set your password, name your arena." },
-            { title: "2. Run daily ops", text: "Book courts, sell equipment, coach, and invoice from one dashboard." },
-            { title: "3. Subscribe when ready", text: "After the trial, pay securely to keep staff and billing online." },
-          ].map((step, index) => (
-            <article key={step.title} data-reveal style={{ transitionDelay: `${index * 100}ms` }}>
-              <h2>{step.title}</h2>
-              <p>{step.text}</p>
+            { value: landingStats.venues, label: "Sports Venues" },
+            { value: landingStats.customers, label: "Happy Customers" },
+            { value: landingStats.bookings, label: "Bookings Managed" },
+            { value: landingStats.uptime, label: "Uptime" },
+          ].map((stat) => (
+            <article key={stat.label}>
+              <strong>{stat.value}</strong>
+              <span>{stat.label}</span>
             </article>
           ))}
+          <p className="lp-script lp-script-inline">Join the SportzArena Family</p>
         </div>
       </section>
 
       <section className="plans-section" id="plans">
+        {arenaMarqueeLoop.length > 0 && (
+          <div className="lp-arena-marquee" aria-label="Partner arenas">
+            <p className="lp-arena-marquee-label">Chosen by sports arenas across India</p>
+            <div className="lp-arena-marquee-viewport">
+              <div
+                className="lp-arena-marquee-track"
+                style={{ animationDuration: `${arenaMarqueeDuration}s` }}
+              >
+                {arenaMarqueeLoop.map((name, i) => (
+                  <span key={`marquee-${name}-${i}`} className="lp-arena-marquee-chip">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         <p className="eyebrow" data-reveal>Pricing</p>
         <h2 data-reveal>₹499 / month after free trial</h2>
-        <p className="billing-summary" data-reveal>One arena · Full toolkit · Cancel anytime</p>
+        <p className="billing-summary" data-reveal>One arena · Full toolkit</p>
         <div className="plan-grid plan-grid-single">
           {plans.map((plan, index) => (
             <PlanCard key={plan.name} plan={plan} index={index} />
           ))}
         </div>
       </section>
+
+      <footer className="lp-footer" id="contact">
+        <div>
+          <strong>SportzArena</strong>
+          <p>Bill. Manage. Grow. — built for Indian sports arenas.</p>
+          <div className="lp-contact">
+            <p className="lp-contact-label">Contact us</p>
+            <a className="lp-contact-link" href="mailto:sportsarenateam@gmail.com">
+              sportsarenateam@gmail.com
+            </a>
+            <a className="lp-contact-link" href="tel:+917094526264">
+              +91 70945 26264
+            </a>
+          </div>
+        </div>
+        <div className="lp-footer-actions">
+          <button type="button" className="link" onClick={() => navigate("/login")}>Login</button>
+          <button type="button" className="primary" onClick={() => navigate("/signup")}>Start free trial</button>
+        </div>
+      </footer>
     </main>
   );
 }
@@ -759,13 +1088,45 @@ function AuthForm({
 }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [loginMethod, setLoginMethod] = useState<"otp" | "password">(mode === "login" ? "password" : "otp");
+  const [loginMethod, setLoginMethod] = useState<"otp" | "password">(mode === "signup" ? "otp" : "password");
   const [otpEmail, setOtpEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [passwordEmail, setPasswordEmail] = useState("");
 
+  // Free trial is OTP-only. Arena name + password come after OTP verification.
+  const showOtp = mode === "signup" || loginMethod === "otp";
+
   const authRedirectTo = `${window.location.origin}/auth/callback`;
+
+  useEffect(() => {
+    // Returning users bounced from free-trial OTP → password login.
+    if (mode !== "login") return;
+    const preferPassword = sessionStorage.getItem("sportzarena-prefer-password") === "1";
+    const savedEmail = sessionStorage.getItem("sportzarena-login-email") || "";
+    if (!preferPassword) return;
+    setLoginMethod("password");
+    if (savedEmail) {
+      setPasswordEmail(savedEmail);
+      setOtpEmail(savedEmail);
+    }
+    setMessage("This email is already registered. Sign in with your email and password.");
+    sessionStorage.removeItem("sportzarena-prefer-password");
+    sessionStorage.removeItem("sportzarena-login-email");
+  }, [mode]);
+
+  function goToPasswordLogin(email: string, notice?: string) {
+    sessionStorage.setItem("sportzarena-login-email", email);
+    sessionStorage.setItem("sportzarena-prefer-password", "1");
+    if (mode === "signup") {
+      navigate("/login");
+      return;
+    }
+    setPasswordEmail(email);
+    setLoginMethod("password");
+    setOtpSent(false);
+    setMessage(notice || "This email is already registered. Sign in with your password.");
+  }
 
   async function lookupEmailStatus(email: string) {
     const statusResponse = await fetch(`${apiUrl}/auth/email-status`, {
@@ -790,84 +1151,34 @@ function AuthForm({
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email")).trim().toLowerCase();
     const password = String(form.get("password"));
-    const arenaName = String(form.get("arenaName") ?? "").trim();
     setBusy(true);
     setMessage("");
     try {
-      if (mode === "login") {
-        const status = await lookupEmailStatus(email);
-        if (!status.exists) {
-          throw new Error("No account found for this email. Use Email OTP to get started.");
-        }
-
-        const result = await supabase!.auth.signInWithPassword({ email, password });
-        if (result.error) {
-          const msg = result.error.message;
-          if (/confirm|not confirmed/i.test(msg)) {
-            throw new Error("Please confirm your email first, or wait a minute and try again.");
-          }
-          if (/rate limit|too many|429/i.test(msg)) {
-            throw new Error("Too many login attempts. Wait about a minute, then try again.");
-          }
-          if (/invalid login credentials|invalid.*password|email not confirmed/i.test(msg)) {
-            if (status.hasPassword === false) {
-              throw new Error("Password is not set for this account yet. Use Email OTP (then set a password) or Forgot password.");
-            }
-            throw new Error("Password is wrong. Try again or use Forgot password.");
-          }
-          throw new Error(msg);
-        }
-        if (result.data.session) onSession?.(result.data.session);
-        setMessage("Signed in — loading your arena…");
-        navigate("/app");
-        return;
-      }
-
       const status = await lookupEmailStatus(email);
-      if (status.exists) {
-        throw new Error("This email is already registered. Please log in instead.");
+      if (!status.exists) {
+        throw new Error("No account found for this email. Use Start Free Trial with Email OTP.");
       }
 
-      const registerResponse = await fetch(`${apiUrl}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ arenaName, email, password }),
-      });
-      const registerBody = await registerResponse.json() as {
-        error?: string;
-        needsEmailConfirmation?: boolean;
-        organization?: { id: string; name: string };
-        subscription?: { trialEndsAt: string | null; status: string };
-      };
-      if (!registerResponse.ok) {
-        if (registerResponse.status === 409) {
-          throw new Error(registerBody.error ?? "This email is already registered. Please log in instead.");
+      const result = await supabase!.auth.signInWithPassword({ email, password });
+      if (result.error) {
+        const msg = result.error.message;
+        if (/confirm|not confirmed/i.test(msg)) {
+          throw new Error("Please confirm your email first, or wait a minute and try again.");
         }
-        throw new Error(registerBody.error ?? "Unable to create account");
+        if (/rate limit|too many|429/i.test(msg)) {
+          throw new Error("Too many login attempts. Wait about a minute, then try again.");
+        }
+        if (/invalid login credentials|invalid.*password|email not confirmed/i.test(msg)) {
+          if (status.hasPassword === false) {
+            throw new Error("Password is not set for this account yet. Use Email OTP (then set a password) or Forgot password.");
+          }
+          throw new Error("Password is wrong. Try again or use Forgot password.");
+        }
+        throw new Error(msg);
       }
-
-      // Password accounts require inbox confirmation (Resend via Supabase SMTP).
-      if (registerBody.needsEmailConfirmation) {
-        setMessage("Account created. Check your email to confirm, then log in with your password (or use Email OTP).");
-        setMode("login");
-        return;
-      }
-
-      const login = await supabase!.auth.signInWithPassword({ email, password });
-      if (login.error || !login.data.session) {
-        throw new Error(login.error?.message ?? "Account created. Please log in.");
-      }
-      onSession?.(login.data.session);
-      if (registerBody.organization && onRegistered) {
-        onRegistered({
-          id: registerBody.organization.id,
-          name: registerBody.organization.name,
-          trial_ends_at: registerBody.subscription?.trialEndsAt ?? null,
-          status: registerBody.subscription?.status ?? "trialing",
-        }, login.data.session.user.id);
-      } else {
-        navigate("/onboarding/sports");
-      }
+      if (result.data.session) onSession?.(result.data.session);
+      setMessage("Signed in — loading your arena…");
+      navigate("/app");
     } catch (error) {
       const text = error instanceof Error ? error.message : "Unable to continue";
       if (/429|rate limit|too many requests|only request this after/i.test(text)) {
@@ -889,35 +1200,30 @@ function AuthForm({
       if (!email) throw new Error("Enter your email");
 
       const status = await lookupEmailStatus(email);
-      // Returning users with a password must use Password login — do not spam OTP.
-      if (mode === "login" && status.exists && status.hasPassword) {
-        setPasswordEmail(email);
-        setLoginMethod("password");
-        setOtpSent(false);
-        setMessage("This email is already registered. Sign in with your password.");
+      // Existing account with password → email + password login (not OTP).
+      if (status.exists && status.hasPassword) {
+        goToPasswordLogin(email);
         return;
       }
-      if (mode === "signup" && status.exists) {
-        setPasswordEmail(email);
-        setLoginMethod("password");
-        setMessage("This email is already registered. Please log in with your password.");
-        return;
+      // Signup with existing email but no password yet → stay on OTP to set one.
+      // Login with no account → still allow OTP to start trial.
+      if (mode === "signup" && status.exists && !status.hasPassword) {
+        setMessage("Account found without a password — enter the OTP, then set one.");
       }
 
       sessionStorage.setItem("sportzarena-otp-email", email);
       const { error } = await supabase!.auth.signInWithOtp({
         email,
         options: {
-          // Only create Auth users for brand-new emails.
           shouldCreateUser: !status.exists,
           emailRedirectTo: authRedirectTo,
         },
       });
       if (error) throw new Error(error.message);
       setOtpSent(true);
-      setMessage(status.exists && !status.hasPassword
-        ? "Account found without a password — enter the OTP, then set one."
-        : "");
+      if (!(mode === "signup" && status.exists && !status.hasPassword)) {
+        setMessage("");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to send OTP");
     } finally {
@@ -957,149 +1263,234 @@ function AuthForm({
   }
 
   return (
-    <main className="auth-page">
-      <div className="auth-theme-bar">
-        <ThemeToggle />
-      </div>
-      <section className="auth-card auth-card-modern">
-        <button className="back" onClick={() => navigate("/")}>← SportzArena</button>
-        <img className="auth-brand" src={sportzArenaLogo} alt="" />
-        <h1>{mode === "login" ? "Welcome back" : "Start free"}</h1>
-        <p>
-          {mode === "login"
-            ? (loginMethod === "otp"
-              ? (otpSent ? `Enter the code sent to ${otpEmail}` : "New here? Enter your email for a one-time code. Returning users should use Password.")
-              : "Sign in with the password you created after OTP.")
-            : (loginMethod === "otp"
-              ? (otpSent ? `Enter the code sent to ${otpEmail}` : "Verify your email with OTP, then set a password.")
-              : "Create with email and password, then choose sports.")}
-        </p>
+    <main className="auth-page auth-split">
+      <aside className="auth-hero-panel">
+        <div className="auth-hero-overlay" aria-hidden="true" />
+        <div className="auth-hero-content">
+          <button type="button" className="auth-hero-brand" onClick={() => navigate("/")}>
+            <img src={sportzArenaLogo} alt="" />
+            <span>
+              <strong>Sportz<span className="accent">Arena</span></strong>
+              <small>Manage • Book • Grow</small>
+            </span>
+          </button>
+          <h1>
+            Your Sports Venue,<br />
+            <span className="accent">Our Smart Solution</span>
+          </h1>
+          <p>
+            Easily manage bookings, customers, revenue and expenses — all in one place.
+            Built for sports arena owners and venue managers.
+          </p>
+          <ul className="auth-hero-features">
+            <li><span aria-hidden="true">📅</span>Easy Bookings</li>
+            <li><span aria-hidden="true">📊</span>Track Revenue</li>
+            <li><span aria-hidden="true">👥</span>Manage Customers</li>
+            <li><span aria-hidden="true">🛡️</span>Control Expenses</li>
+          </ul>
+          <p className="auth-hero-script">More Sports More Possibilities</p>
+        </div>
+      </aside>
 
-        {mode === "login" || mode === "signup" ? (
-          <div className="auth-method-tabs" role="tablist" aria-label="Login method">
-            <button type="button" className={loginMethod === "otp" ? "active" : ""} onClick={() => { setLoginMethod("otp"); setMessage(""); }}>Email OTP</button>
-            <button type="button" className={loginMethod === "password" ? "active" : ""} onClick={() => { setLoginMethod("password"); setMessage(""); }}>
-              {mode === "signup" ? "Email & password" : "Password"}
-            </button>
-          </div>
-        ) : null}
-
-        {(mode === "login" || mode === "signup") && loginMethod === "otp" ? (
-          !otpSent ? (
-            <form onSubmit={sendEmailLogin}>
-              <label>Email
-                <input
-                  type="email"
-                  value={otpEmail}
-                  onChange={(e) => setOtpEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder="you@yourarena.com"
-                  autoFocus
-                />
-              </label>
-              <button className="primary" disabled={busy}>{busy ? "Sending…" : "Send OTP"}</button>
-            </form>
-          ) : (
-            <div className="auth-email-sent">
-              <p className="auth-email-hint">
-                Check your inbox for the code. After OTP you’ll set a password, then continue.
-              </p>
-              <form onSubmit={verifyEmailCode}>
-                <label>OTP code
-                  <input
-                    className="otp-input"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="••••••"
-                    autoFocus
-                  />
-                </label>
-                <button className="primary" disabled={busy || otpCode.replace(/\D/g, "").length < 6}>
-                  {busy ? "Verifying…" : "Verify OTP"}
-                </button>
-              </form>
+      <section className="auth-form-panel">
+        <div className="auth-form-top">
+          <ThemeToggle />
+          {mode === "login" ? (
+            <p className="auth-trial-link">
+              Don&apos;t have an account?{" "}
               <button
                 type="button"
-                className="link"
-                disabled={busy}
-                onClick={async () => {
-                  setOtpCode("");
-                  setMessage("");
-                  setBusy(true);
-                  try {
-                    const status = await lookupEmailStatus(otpEmail.trim().toLowerCase());
-                    if (status.exists && status.hasPassword) {
-                      setPasswordEmail(otpEmail.trim().toLowerCase());
-                      setLoginMethod("password");
-                      setOtpSent(false);
-                      setMessage("This email is already registered. Sign in with your password.");
-                      return;
-                    }
-                    const { error } = await supabase!.auth.signInWithOtp({
-                      email: otpEmail.trim().toLowerCase(),
-                      options: { shouldCreateUser: !status.exists, emailRedirectTo: authRedirectTo },
-                    });
-                    if (error) throw new Error(error.message);
-                    setMessage("New OTP sent. Use the latest email.");
-                  } catch (error) {
-                    setMessage(error instanceof Error ? error.message : "Unable to resend");
-                  } finally {
-                    setBusy(false);
-                  }
+                className="link accent-link"
+                onClick={() => {
+                  sessionStorage.removeItem("sportzarena-prefer-password");
+                  navigate("/signup");
                 }}
               >
-                Resend OTP
+                Start Free Trial →
               </button>
-              <button type="button" className="link" onClick={() => { setOtpSent(false); setOtpCode(""); setMessage(""); }}>
-                Change email
+            </p>
+          ) : (
+            <p className="auth-trial-link">
+              Already have an account?{" "}
+              <button type="button" className="link accent-link" onClick={() => navigate("/login")}>
+                Login →
+              </button>
+            </p>
+          )}
+        </div>
+
+        <div className="auth-card auth-card-modern auth-card-split">
+          <img className="auth-brand" src={sportzArenaLogo} alt="SportzArena" />
+          <h1>{mode === "login" ? "Welcome back 👋" : "Start free trial"}</h1>
+          <p className="auth-lead">
+            {mode === "signup"
+              ? (otpSent
+                ? `Enter the code sent to ${otpEmail}`
+                : "Verify your email with OTP. After that you’ll set a password and create your arena.")
+              : (showOtp
+                ? (otpSent
+                  ? `Enter the code sent to ${otpEmail}`
+                  : "Use Email OTP, or switch to Password if you already have an account.")
+                : "Log in with your email and password.")}
+          </p>
+
+          {mode === "login" ? (
+            <div className="auth-method-tabs" role="tablist" aria-label="Login method">
+              <button
+                type="button"
+                className={showOtp ? "active" : undefined}
+                onClick={() => { setLoginMethod("otp"); setMessage(""); setOtpSent(false); }}
+              >
+                Email OTP
+              </button>
+              <button
+                type="button"
+                className={!showOtp ? "active" : undefined}
+                onClick={() => { setLoginMethod("password"); setMessage(""); setOtpSent(false); }}
+              >
+                Password
               </button>
             </div>
-          )
-        ) : (
-          <form onSubmit={submitPassword}>
-            {mode === "signup" && (
-              <label>
-                Sports arena name
-                <input name="arenaName" required minLength={2} maxLength={120} placeholder="e.g. GreenField Sports Arena" />
-              </label>
-            )}
-            <label>Email
-              <input
-                type="email"
-                name="email"
-                required
-                autoComplete="email"
-                value={passwordEmail}
-                onChange={(e) => setPasswordEmail(e.target.value)}
-              />
-            </label>
-            <PasswordInput
-              label="Password"
-              name="password"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-            />
-            <button className="primary" disabled={busy}>
-              {busy ? "Please wait…" : "Log in with password"}
-            </button>
-          </form>
-        )}
+          ) : null}
 
-        <p className="notice">{message}</p>
-        {mode === "login" && /No account found/i.test(message) ? (
-          <p className="ops-muted">Use <strong>Email OTP</strong> above to verify your email and start.</p>
-        ) : null}
-        {mode === "login" ? (
-          <button className="link" type="button" onClick={() => { setLoginMethod("otp"); setMessage(""); setOtpSent(false); }}>
-            New arena? Start with Email OTP
-          </button>
-        ) : null}
-        {loginMethod === "password" && mode === "login" && (
-          <button className="link" onClick={() => navigate("/forgot-password")}>Forgot password?</button>
-        )}
+          {showOtp ? (
+            !otpSent ? (
+              <form onSubmit={sendEmailLogin}>
+                <label>Email
+                  <span className="input-with-icon">
+                    <span className="input-icon" aria-hidden="true">✉</span>
+                    <input
+                      type="email"
+                      value={otpEmail}
+                      onChange={(e) => setOtpEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      inputMode="email"
+                      placeholder=""
+                      autoFocus
+                    />
+                  </span>
+                </label>
+                <button className="primary auth-login-btn" disabled={busy}>{busy ? "Sending…" : "Send OTP →"}</button>
+              </form>
+            ) : (
+              <div className="auth-email-sent">
+                <p className="auth-email-hint">
+                  Check your inbox for the code. After OTP you&apos;ll set a password, then continue.
+                </p>
+                <form onSubmit={verifyEmailCode}>
+                  <label>OTP code
+                    <input
+                      className="otp-input"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="••••••"
+                      autoFocus
+                    />
+                  </label>
+                  <button className="primary auth-login-btn" disabled={busy || otpCode.replace(/\D/g, "").length < 6}>
+                    {busy ? "Verifying…" : "Verify OTP →"}
+                  </button>
+                </form>
+                <button
+                  type="button"
+                  className="link"
+                  disabled={busy}
+                  onClick={async () => {
+                    setOtpCode("");
+                    setMessage("");
+                    setBusy(true);
+                    try {
+                      const status = await lookupEmailStatus(otpEmail.trim().toLowerCase());
+                      if (status.exists && status.hasPassword) {
+                        goToPasswordLogin(otpEmail.trim().toLowerCase());
+                        return;
+                      }
+                      const { error } = await supabase!.auth.signInWithOtp({
+                        email: otpEmail.trim().toLowerCase(),
+                        options: { shouldCreateUser: !status.exists, emailRedirectTo: authRedirectTo },
+                      });
+                      if (error) throw new Error(error.message);
+                      setMessage("New OTP sent. Use the latest email.");
+                    } catch (error) {
+                      setMessage(error instanceof Error ? error.message : "Unable to resend");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Resend OTP
+                </button>
+                <button type="button" className="link" onClick={() => { setOtpSent(false); setOtpCode(""); setMessage(""); }}>
+                  Change email
+                </button>
+              </div>
+            )
+          ) : (
+            <form onSubmit={submitPassword}>
+              <label>Email
+                <span className="input-with-icon">
+                  <span className="input-icon" aria-hidden="true">✉</span>
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    autoComplete="email"
+                    value={passwordEmail}
+                    onChange={(e) => setPasswordEmail(e.target.value)}
+                    placeholder=""
+                  />
+                </span>
+              </label>
+              <PasswordInput
+                label="Password"
+                name="password"
+                autoComplete="current-password"
+                placeholder=""
+              />
+              <div className="auth-forgot-row">
+                <button className="link accent-link" type="button" onClick={() => navigate("/forgot-password")}>
+                  Forgot Password?
+                </button>
+              </div>
+              <button className="primary auth-login-btn" disabled={busy}>
+                {busy ? "Please wait…" : "Login →"}
+              </button>
+            </form>
+          )}
+
+          <p className="notice">{message}</p>
+          {mode === "login" && /No account found/i.test(message) ? (
+            <p className="ops-muted">Use <strong>Start Free Trial</strong> with Email OTP to get started.</p>
+          ) : null}
+
+          <p className="auth-footer-trial">
+            {mode === "login" ? (
+              <>
+                Don&apos;t have an account?{" "}
+                <button
+                  type="button"
+                  className="link accent-link"
+                  onClick={() => {
+                    sessionStorage.removeItem("sportzarena-prefer-password");
+                    navigate("/signup");
+                  }}
+                >
+                  Start Free Trial →
+                </button>
+              </>
+            ) : (
+              <>
+                Already registered?{" "}
+                <button type="button" className="link accent-link" onClick={() => navigate("/login")}>
+                  Login →
+                </button>
+              </>
+            )}
+          </p>
+        </div>
       </section>
     </main>
   );
