@@ -1074,19 +1074,113 @@ button { cursor: pointer; }
 
 @media (max-width: 980px) {
   .landing-nav-links { display: none; }
-  .landing-v2 .landing-nav { grid-template-columns: 1fr auto; }
-  .lp-hero-inner { grid-template-columns: 1fr; }
-  .lp-hero-visual { min-height: 420px; max-width: 560px; margin: 0 auto; width: 100%; }
-  .lp-laptop-shell { margin-right: 40px; }
+  .landing-v2 .landing-nav {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    height: auto;
+    min-height: 64px;
+    padding: 10px max(16px, 4vw);
+  }
+  .landing-v2 .landing-nav-actions {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .landing-brand .brand-logo { height: 34px; max-width: 96px; }
+  .landing-brand-text { font-size: 17px; }
+  .lp-hero {
+    padding: 28px max(16px, 4vw) 40px;
+  }
+  .lp-hero-inner {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .lp-hero-copy { text-align: left; }
+  .lp-hero-actions { justify-content: flex-start; }
+  .lp-hero-visual {
+    min-height: 0;
+    max-width: 520px;
+    margin: 0 auto;
+    width: 100%;
+    padding-bottom: 56px;
+  }
+  .lp-laptop-shell { margin-right: 0; }
+  .lp-device-phone {
+    right: 4%;
+    top: auto;
+    bottom: 64px;
+    width: 112px;
+  }
+  .lp-hero-sports {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
   .lp-feature-grid { grid-template-columns: 1fr 1fr; }
   .lp-about { grid-template-columns: 1fr; }
+  .lp-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .lp-footer-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }
 @media (max-width: 640px) {
+  .landing-v2 .landing-nav {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .landing-v2 .landing-nav-actions {
+    gap: 6px;
+  }
+  .landing-v2 .landing-nav .btn-ghost {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .landing-v2 .landing-nav .primary {
+    padding: 8px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .landing-v2 .theme-toggle {
+    padding: 7px 9px;
+  }
+  .landing-v2 .theme-toggle-label {
+    display: none;
+  }
+  .landing-brand { gap: 8px; min-width: 0; }
+  .landing-brand .brand-logo { height: 30px; max-width: 84px; }
+  .landing-brand-text { font-size: 15px; }
+  .lp-hero { padding: 20px 14px 32px; }
+  .lp-hero-copy h1 {
+    max-width: none;
+    font-size: clamp(28px, 8vw, 36px);
+  }
+  .lp-lead { font-size: 15px; max-width: none; }
+  .lp-hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .lp-hero-actions .primary,
+  .lp-hero-actions .btn-ghost {
+    width: 100%;
+    justify-content: center;
+  }
+  .lp-trust {
+    gap: 10px 14px;
+    font-size: 12px;
+  }
   .lp-feature-grid { grid-template-columns: 1fr; }
   .lp-desk-body { grid-template-columns: 1fr; }
   .lp-desk-side { display: none; }
+  .lp-desk-charts { grid-template-columns: 1fr; }
   .lp-laptop-shell { margin-right: 0; }
-  .lp-device-phone { right: 8px; top: auto; bottom: 78px; width: 108px; }
+  /* Phone overlay crowds narrow Chrome — keep laptop + sports only */
+  .lp-device-phone { display: none; }
   .lp-hero-sports {
     left: 0;
     right: 0;
@@ -1094,10 +1188,38 @@ button { cursor: pointer; }
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
   }
+  .lp-hero-sports article { padding: 8px 4px; border-radius: 12px; }
+  .lp-sport-icon { width: 36px; height: 36px; }
   .lp-hero-sports b { font-size: 10px; }
   .lp-script { display: none; }
-  .lp-hero-copy h1 { max-width: none; }
-  .lp-hero-visual { padding-bottom: 64px; min-height: 360px; }
+  .lp-hero-visual {
+    padding-bottom: 72px;
+    min-height: 0;
+  }
+  .lp-about {
+    padding: 16px 14px 48px;
+    gap: 18px;
+  }
+  .lp-about-media,
+  .lp-about-media img { min-height: 260px; }
+  .lp-about-overlay { inset: auto 14px 14px 14px; }
+  .lp-about-overlay p { font-size: 20px; }
+  .lp-stats {
+    padding: 24px 18px;
+    gap: 16px 12px;
+  }
+  .lp-footer {
+    padding: 22px 14px;
+  }
+  .lp-footer-actions .primary,
+  .lp-footer-actions .link {
+    flex: 1 1 auto;
+  }
+  .lp-features,
+  .plans-section {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }
 
 .hero {

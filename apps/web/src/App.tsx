@@ -36,6 +36,20 @@ type Arena = {
 const navigate = (path: string) => { window.history.pushState({}, "", path); window.dispatchEvent(new PopStateEvent("popstate")); };
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
+/** Free-trial CTAs always open OTP signup — clear any leftover browser session first (e.g. after a DB wipe). */
+async function startFreeTrial() {
+  if (supabase) {
+    try {
+      const uid = (await supabase.auth.getSession()).data.session?.user.id;
+      clearUserCache(uid);
+      await supabase.auth.signOut();
+    } catch {
+      // ignore — still send them to signup
+    }
+  }
+  navigate("/signup");
+}
+
 function formatLandingCount(n: number) {
   if (!Number.isFinite(n) || n < 0) return "0+";
   if (n >= 1_000_000) {
@@ -802,7 +816,7 @@ function PlanCard({
       <h2 className="plan-price">₹{animatedPrice}<small>/month</small></h2>
       <p className="billing-note">Billed monthly · One arena</p>
       <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
-      <button type="button" className="primary" onClick={() => navigate("/signup")}>
+      <button type="button" className="primary" onClick={() => void startFreeTrial()}>
         Start 30-day free trial
       </button>
     </article>
@@ -931,7 +945,7 @@ function Landing() {
         <div className="landing-nav-actions">
           <ThemeToggle />
           <button type="button" className="btn-ghost" onClick={() => navigate("/login")}>Login</button>
-          <button type="button" className="primary" onClick={() => navigate("/signup")}>Get Started Free</button>
+          <button type="button" className="primary" onClick={() => void startFreeTrial()}>Get Started Free</button>
         </div>
       </nav>
 
@@ -948,7 +962,7 @@ function Landing() {
               Court bookings, invoices, coaching, memberships, and sales — one workspace built for Indian sports arenas.
             </p>
             <div className="lp-hero-actions anim-fade-up" style={{ animationDelay: "240ms" }}>
-              <button type="button" className="primary large" onClick={() => navigate("/signup")}>
+              <button type="button" className="primary large" onClick={() => void startFreeTrial()}>
                 Get Started Free →
               </button>
               <button
@@ -1007,7 +1021,7 @@ function Landing() {
           <img src={sportzArenaBackground} alt="Indoor sports court" />
           <div className="lp-about-overlay">
             <p>Built for Sports Venue Owners</p>
-            <button type="button" className="primary" onClick={() => navigate("/signup")}>Get Started Free →</button>
+            <button type="button" className="primary" onClick={() => void startFreeTrial()}>Get Started Free →</button>
           </div>
         </div>
         <div className="lp-stats" data-reveal>
@@ -1070,7 +1084,7 @@ function Landing() {
         </div>
         <div className="lp-footer-actions">
           <button type="button" className="link" onClick={() => navigate("/login")}>Login</button>
-          <button type="button" className="primary" onClick={() => navigate("/signup")}>Start free trial</button>
+          <button type="button" className="primary" onClick={() => void startFreeTrial()}>Start free trial</button>
         </div>
       </footer>
     </main>
