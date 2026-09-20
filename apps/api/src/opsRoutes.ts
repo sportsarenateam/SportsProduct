@@ -629,6 +629,7 @@ export function registerOpsRoutes(
   });
 
   app.delete("/ops/generated-invoices/:id", ...withOrg, async (req: AuthedRequest, res) => {
+    if (req.role !== "owner") return res.status(403).json({ error: "Only the owner can delete invoices" });
     const { error } = await db.from("generated_invoices")
       .delete()
       .eq("id", req.params.id)

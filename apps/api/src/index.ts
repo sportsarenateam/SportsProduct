@@ -58,8 +58,11 @@ function isAllowedOrigin(origin?: string | null) {
   if (allowedOrigins.includes(normalized)) return true;
   if (productionWebOrigins.includes(normalized)) return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/i.test(normalized)) return true;
-  if (/\.(loca\.lt|ngrok-free\.app|ngrok\.io|exp\.direct|trycloudflare\.com|vercel\.app)$/i.test(normalized)) return true;
-  if (/^https?:\/\/.*\.(loca\.lt|trycloudflare\.com|vercel\.app)$/i.test(normalized)) return true;
+  // Dev/preview tunnels only — never widen production API CORS to arbitrary vercel/tunnel hosts.
+  if (cashfreeEnv !== "production" && process.env.NODE_ENV !== "production") {
+    if (/\.(loca\.lt|ngrok-free\.app|ngrok\.io|exp\.direct|trycloudflare\.com|vercel\.app)$/i.test(normalized)) return true;
+    if (/^https?:\/\/.*\.(loca\.lt|trycloudflare\.com|vercel\.app)$/i.test(normalized)) return true;
+  }
   return false;
 }
 app.use(cors({
@@ -136,33 +139,19 @@ async function requireEntitlement(req: AuthedRequest, res: Response, next: NextF
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-/** Public marketing stats for the landing page (no auth). */
+/** Public marketing stats for the landing page (no auth). Counts only — never ship phones or raw customer rows. */
 app.get("/public/landing-stats", async (_req, res) => {
   try {
-    const [venuesRes, arenasRes, customersRes, posMobilesRes, bookingsRes, invoiceRes] = await Promise.all([
+    const [venuesRes, arenasRes, customersRes, bookingsRes] = await Promise.all([
       db.from("organizations").select("id", { count: "exact", head: true }),
       db.from("organizations").select("name").order("created_at", { ascending: false }).limit(40),
-      db.from("customers").select("phone"),
-      db.from("pos_transactions").select("customer_mobile"),
+      db.from("customers").select("id", { count: "exact", head: true }),
       db.from("pos_transactions").select("id", { count: "exact", head: true }),
-      db.from("generated_invoices").select("customer_mobile"),
     ]);
     if (venuesRes.error) throw venuesRes.error;
     if (arenasRes.error) throw arenasRes.error;
     if (customersRes.error) throw customersRes.error;
-    if (posMobilesRes.error) throw posMobilesRes.error;
     if (bookingsRes.error) throw bookingsRes.error;
-    if (invoiceRes.error) throw invoiceRes.error;
-
-    const mobiles = new Set<string>();
-    for (const row of customersRes.data ?? []) {
-      const phone = String((row as { phone?: string }).phone ?? "").replace(/\D/g, "").slice(-10);
-      if (phone.length === 10) mobiles.add(phone);
-    }
-    for (const row of [...(posMobilesRes.data ?? []), ...(invoiceRes.data ?? [])]) {
-      const phone = String((row as { customer_mobile?: string }).customer_mobile ?? "").replace(/\D/g, "").slice(-10);
-      if (phone.length === 10) mobiles.add(phone);
-    }
 
     const arenas = (arenasRes.data ?? [])
       .map((row) => String((row as { name?: string }).name ?? "").trim())
@@ -170,7 +159,7 @@ app.get("/public/landing-stats", async (_req, res) => {
 
     res.json({
       venues: venuesRes.count ?? 0,
-      customers: mobiles.size,
+      customers: customersRes.count ?? 0,
       bookings: bookingsRes.count ?? 0,
       uptime: "99.9%",
       arenas,
@@ -606,9 +595,9 @@ app.post("/subscriptions/checkout", express.json(), authenticate, membership, re
     const phoneDigits = String(org?.contact_phone ?? "").replace(/\D/g, "");
     const customerPhone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : "9999999999";
     const orderId = `sa_${String(req.organizationId).replace(/-/g, "").slice(0, 12)}_${Date.now()}`;
-    // Prefer the browser Origin (Vercel URL) so mobile return works; fall back to APP_URL.
+    // Prefer the browser Origin when it is an allowlisted host; otherwise APP_URL / default.
     const requestOrigin = String(req.get("origin") || "").replace(/\/$/, "");
-    const safeOrigin = requestOrigin && (allowedOrigins.length === 0 || allowedOrigins.includes(requestOrigin))
+    const safeOrigin = requestOrigin && isAllowedOrigin(requestOrigin)
       ? requestOrigin
       : appOrigin.replace(/\/$/, "");
     const returnUrl = `${safeOrigin}/app?cf_order={order_id}`;
