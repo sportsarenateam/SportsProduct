@@ -15,6 +15,12 @@ import {
   type CashfreeEnv,
 } from "./cashfree.js";
 import { registerOpsRoutes } from "./opsRoutes.js";
+import {
+  buildSubscriptionInvoicePdf,
+  issueSubscriptionInvoice,
+  type InvoiceIssuerConfig,
+  type SubscriptionInvoiceRow,
+} from "./subscriptionInvoice.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
@@ -33,7 +39,17 @@ const env = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   RAZORPAY_MODE: z.enum(["test", "live"]).optional(),
+  INVOICE_SUPPORT_EMAIL: z.string().email().optional(),
+  INVOICE_SUPPORT_PHONE: z.string().optional(),
+  INVOICE_LEGAL_NAME: z.string().optional(),
+  INVOICE_GSTIN: z.string().optional(),
 }).parse(process.env);
+const invoiceIssuer: InvoiceIssuerConfig = {
+  supportEmail: env.INVOICE_SUPPORT_EMAIL || "sportsarenateam@gmail.com",
+  supportPhone: env.INVOICE_SUPPORT_PHONE || "+91 70945 26264",
+  legalName: env.INVOICE_LEGAL_NAME || "SportzArena",
+  gstin: env.INVOICE_GSTIN?.trim() || undefined,
+};
 const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
 const cashfreeEnv: CashfreeEnv = env.CASHFREE_ENV;
 const cashfreeConfig = {
@@ -415,6 +431,7 @@ app.post("/auth/register", express.json(), async (req, res) => {
     await db.auth.admin.generateLink({
       type: "signup",
       email,
+      password: input.password,
       options: { redirectTo: `${appOrigin}/auth/callback` },
     }).catch((err) => console.warn("Confirmation email generateLink failed:", err));
 
@@ -524,6 +541,31 @@ app.get("/subscriptions/status", authenticate, membership, async (req: AuthedReq
     .eq("organization_id", req.organizationId).maybeSingle();
   if (error) return res.status(400).json({ error: error.message });
   res.json(data ?? { status: "none" });
+});
+app.get("/subscriptions/invoices", authenticate, membership, requireRole("owner"), async (req: AuthedRequest, res) => {
+  const { data, error } = await db.from("subscription_invoices")
+    .select("id,invoice_number,amount,currency,plan_name,period_starts_at,period_ends_at,customer_email,emailed_at,created_at,cashfree_order_id")
+    .eq("organization_id", req.organizationId)
+    .order("created_at", { ascending: false });
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ invoices: data ?? [] });
+});
+app.get("/subscriptions/invoices/:id.pdf", authenticate, membership, requireRole("owner"), async (req: AuthedRequest, res) => {
+  const { data: invoice, error } = await db.from("subscription_invoices")
+    .select("*")
+    .eq("id", req.params.id)
+    .eq("organization_id", req.organizationId)
+    .maybeSingle();
+  if (error) return res.status(400).json({ error: error.message });
+  if (!invoice) return res.sendStatus(404);
+  try {
+    const pdf = await buildSubscriptionInvoicePdf(invoice as SubscriptionInvoiceRow, invoiceIssuer);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${invoice.invoice_number}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unable to build invoice PDF" });
+  }
 });
 app.get("/reports/sessions.xlsx", authenticate, membership, requireEntitlement, requireRole("owner"), async (req: AuthedRequest, res) => {
   const { from = new Date().toISOString().slice(0, 10), to = new Date().toISOString() } = req.query as Record<string, string>;
@@ -756,11 +798,26 @@ app.post("/subscriptions/verify", express.json(), authenticate, membership, requ
       return res.status(500).json({ error: activateError.message });
     }
 
+    let invoiceNumber: string | null = null;
+    try {
+      const issued = await issueSubscriptionInvoice(db, invoiceIssuer, {
+        organizationId: String(req.organizationId),
+        cashfreeOrderId: input.orderId,
+        planId: primary.data?.plan_id ?? "basic",
+        periodEndsAt: periodEnd.toISOString(),
+        fallbackEmail: req.user?.email,
+      });
+      invoiceNumber = issued.invoice.invoice_number;
+    } catch (invoiceError) {
+      console.error("subscription invoice issue failed:", invoiceError);
+    }
+
     res.status(200).json({
       verified: true,
       status: "active",
       periodEndsAt: periodEnd.toISOString(),
       paymentId: input.paymentId ?? null,
+      invoiceNumber,
     });
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message ?? "Invalid payload" });
@@ -827,6 +884,22 @@ app.post("/webhooks/cashfree", express.raw({ type: "*/*" }), async (req, res) =>
         status: "active",
         current_period_ends_at: periodEnd.toISOString(),
       }).eq("razorpay_subscription_id", orderId);
+    }
+    const { data: paidSub } = await db.from("arena_subscriptions")
+      .select("organization_id,plan_id,current_period_ends_at")
+      .eq("cashfree_order_id", orderId)
+      .maybeSingle();
+    if (paidSub?.organization_id) {
+      try {
+        await issueSubscriptionInvoice(db, invoiceIssuer, {
+          organizationId: paidSub.organization_id,
+          cashfreeOrderId: orderId,
+          planId: paidSub.plan_id,
+          periodEndsAt: paidSub.current_period_ends_at || periodEnd.toISOString(),
+        });
+      } catch (invoiceError) {
+        console.error("subscription invoice issue failed:", invoiceError);
+      }
     }
     res.sendStatus(200);
   } catch (error) {

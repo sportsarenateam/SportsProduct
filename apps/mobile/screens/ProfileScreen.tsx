@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import type { Session } from "@supabase/supabase-js";
-import { opsRequest } from "../lib/api";
+import { opsRequest, opsRequestPdf } from "../lib/api";
 import { assertPasswordStrength, isValidMobile, mobileDigits, PASSWORD_HINT, sanitizeMobileInput } from "../lib/opsHelpers";
 import type { AppRole, Arena } from "../lib/types";
 import { supabase } from "../lib/supabase";
@@ -25,6 +27,15 @@ type StaffRow = {
   email: string;
   fullName: string;
   active: boolean;
+};
+
+type SubscriptionInvoiceRow = {
+  id: string;
+  invoice_number: string;
+  amount: number;
+  plan_name: string;
+  emailed_at: string | null;
+  created_at: string;
 };
 
 export function ProfileScreen({
@@ -58,6 +69,9 @@ export function ProfileScreen({
   const [staffError, setStaffError] = useState("");
   const [staffMessage, setStaffMessage] = useState("");
   const [staffList, setStaffList] = useState<StaffRow[]>([]);
+  const [invoices, setInvoices] = useState<SubscriptionInvoiceRow[]>([]);
+  const [invoiceError, setInvoiceError] = useState("");
+  const [invoiceBusyId, setInvoiceBusyId] = useState("");
 
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -89,6 +103,10 @@ export function ProfileScreen({
 
   useEffect(() => {
     loadStaff().catch(() => undefined);
+    if (!isOwner) return;
+    opsRequest<{ invoices: SubscriptionInvoiceRow[] }>(session, arena.id, "/subscriptions/invoices")
+      .then((data) => setInvoices(data.invoices ?? []))
+      .catch((err) => setInvoiceError(err instanceof Error ? err.message : "Unable to load invoices"));
   }, [session.access_token, arena.id, isOwner]);
 
   async function changePassword() {
@@ -190,6 +208,31 @@ export function ProfileScreen({
     }
   }
 
+  async function shareInvoice(row: SubscriptionInvoiceRow) {
+    setInvoiceBusyId(row.id);
+    setInvoiceError("");
+    try {
+      const pdf = await opsRequestPdf(session, arena.id, `/subscriptions/invoices/${row.id}.pdf`);
+      const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      if (!baseDir) throw new Error("Cannot save the invoice PDF on this device");
+      const dest = `${baseDir}${pdf.filename}`;
+      await FileSystem.writeAsStringAsync(dest, pdf.base64, { encoding: FileSystem.EncodingType.Base64 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(dest, {
+          mimeType: "application/pdf",
+          UTI: "com.adobe.pdf",
+          dialogTitle: row.invoice_number,
+        });
+      } else {
+        setInvoiceError("Sharing is not available on this device.");
+      }
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Unable to open invoice");
+    } finally {
+      setInvoiceBusyId("");
+    }
+  }
+
   return (
     <Screen>
       <BackHeader title="Arena Profile" onBack={onBack} />
@@ -222,6 +265,40 @@ export function ProfileScreen({
         {saved ? <Muted>Profile saved.</Muted> : null}
         {isOwner ? <PrimaryButton label="Save profile" busy={busy} onPress={save} /> : null}
       </Card>
+
+      {isOwner ? (
+        <Card>
+          <Text style={{ fontWeight: "700", color: themeColors.navy, fontSize: 16 }}>Subscription invoices</Text>
+          <Muted>After you pay ₹499, download your SportzArena invoice here. Cashfree only collects the payment.</Muted>
+          {invoices.length === 0 && !invoiceError ? <Muted>No subscription invoices yet.</Muted> : null}
+          <ErrorText>{invoiceError}</ErrorText>
+          {invoices.map((row) => (
+            <View
+              key={row.id}
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                paddingVertical: 8,
+                borderBottomWidth: 1,
+                borderBottomColor: themeColors.border,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: "700", color: themeColors.navy }}>{row.invoice_number}</Text>
+                <Muted>
+                  ₹{Number(row.amount).toFixed(0)} · {new Date(row.created_at).toLocaleDateString("en-IN")}
+                </Muted>
+              </View>
+              <LinkButton
+                label={invoiceBusyId === row.id ? "Opening…" : "PDF"}
+                onPress={() => shareInvoice(row)}
+              />
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       <Card>
         <Text style={{ fontWeight: "700", color: themeColors.navy, fontSize: 16 }}>Change password</Text>

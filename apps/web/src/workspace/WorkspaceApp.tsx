@@ -110,6 +110,23 @@ async function opsRequest<T>(session: Session, organizationId: string, path: str
   return body;
 }
 
+async function downloadSubscriptionInvoicePdf(session: Session, organizationId: string, invoiceId: string, filename: string) {
+  const response = await fetch(`${apiUrl}/subscriptions/invoices/${invoiceId}.pdf`, {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      "x-organization-id": organizationId,
+    },
+  });
+  if (!response.ok) throw new Error("Unable to download subscription invoice");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function loadCashfree(): Promise<void> {
   return new Promise((resolve, reject) => {
     if ((window as any).Cashfree) return resolve();
@@ -2833,6 +2850,8 @@ function ProfilePanel({
         {isOwner && <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save profile"}</button>}
       </form>
 
+      {isOwner && <SubscriptionInvoicesCard session={session} arenaId={arena.id} />}
+
       <section className="ops-card" style={{ marginTop: 16 }}>
         <h3>Change password</h3>
         <p className="ops-muted">
@@ -2901,6 +2920,70 @@ function ProfilePanel({
         </section>
       )}
     </div>
+  );
+}
+
+type SubscriptionInvoiceListItem = {
+  id: string;
+  invoice_number: string;
+  amount: number;
+  plan_name: string;
+  period_starts_at: string;
+  period_ends_at: string;
+  emailed_at: string | null;
+  created_at: string;
+};
+
+function SubscriptionInvoicesCard({ session, arenaId }: { session: Session; arenaId: string }) {
+  const [invoices, setInvoices] = useState<SubscriptionInvoiceListItem[]>([]);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState("");
+
+  useEffect(() => {
+    opsRequest<{ invoices: SubscriptionInvoiceListItem[] }>(session, arenaId, "/subscriptions/invoices")
+      .then((data) => setInvoices(data.invoices ?? []))
+      .catch((err) => setError(err instanceof Error ? err.message : "Unable to load invoices"));
+  }, [session.access_token, arenaId]);
+
+  return (
+    <section className="ops-card" style={{ marginTop: 16 }}>
+      <h3>Subscription invoices</h3>
+      <p className="ops-muted">
+        After you pay ₹499, download your SportzArena invoice here. Cashfree only collects the payment.
+      </p>
+      {error && <p className="workspace-notice">{error}</p>}
+      {invoices.length === 0 && !error && <p className="ops-muted">No subscription invoices yet.</p>}
+      <ul style={{ listStyle: "none", padding: 0, marginTop: 12 }}>
+        {invoices.map((row) => (
+          <li key={row.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #e2e8f0" }}>
+            <div>
+              <strong>{row.invoice_number}</strong>
+              <div className="ops-muted">
+                ₹{Number(row.amount).toFixed(0)} · {row.plan_name} · {new Date(row.created_at).toLocaleDateString("en-IN")}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="link"
+              disabled={busyId === row.id}
+              onClick={async () => {
+                setBusyId(row.id);
+                setError("");
+                try {
+                  await downloadSubscriptionInvoicePdf(session, arenaId, row.id, row.invoice_number);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Unable to download invoice");
+                } finally {
+                  setBusyId("");
+                }
+              }}
+            >
+              {busyId === row.id ? "Downloading…" : "Download PDF"}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

@@ -834,6 +834,18 @@ function Landing() {
   const [arenaNames, setArenaNames] = useState<string[]>([]);
   const [arenaIndex, setArenaIndex] = useState(0);
   const [demoPulse, setDemoPulse] = useState(0);
+  const [navOpen, setNavOpen] = useState(false);
+  const landingLinks = [
+    { href: "#home", label: "Home" },
+    { href: "#features", label: "Features" },
+    { href: "#plans", label: "Pricing" },
+    { href: "#about", label: "About Us" },
+    { href: "#contact", label: "Contact" },
+  ];
+
+  function closeNav() {
+    setNavOpen(false);
+  }
 
   function watchDemo() {
     const el = document.getElementById("demo");
@@ -928,24 +940,40 @@ function Landing() {
 
   return (
     <main className="landing landing-v2">
-      <nav className="landing-nav">
-        <a className="landing-brand" href="/" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+      <nav className={`landing-nav${navOpen ? " is-open" : ""}`}>
+        <a className="landing-brand" href="/" onClick={(e) => { e.preventDefault(); closeNav(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
           <img className="brand-logo" src={sportzArenaLogo} alt="" />
           <span className="landing-brand-text">
             <span>Sportz</span><span className="accent">Arena</span>
           </span>
         </a>
         <div className="landing-nav-links">
-          <a className="is-active" href="#home">Home</a>
-          <a href="#features">Features</a>
-          <a href="#plans">Pricing</a>
-          <a href="#about">About Us</a>
-          <a href="#contact">Contact</a>
+          {landingLinks.map((link) => (
+            <a key={link.href} className={link.href === "#home" ? "is-active" : undefined} href={link.href} onClick={closeNav}>
+              {link.label}
+            </a>
+          ))}
         </div>
         <div className="landing-nav-actions">
           <ThemeToggle />
-          <button type="button" className="btn-ghost" onClick={() => navigate("/login")}>Login</button>
-          <button type="button" className="primary" onClick={() => void startFreeTrial()}>Get Started Free</button>
+          <button type="button" className="btn-ghost landing-nav-login" onClick={() => navigate("/login")}>Login</button>
+          <button type="button" className="primary landing-nav-cta" onClick={() => void startFreeTrial()}>Get Started Free</button>
+          <button
+            type="button"
+            className="landing-nav-toggle"
+            aria-expanded={navOpen}
+            aria-label={navOpen ? "Close menu" : "Open menu"}
+            onClick={() => setNavOpen((open) => !open)}
+          >
+            <span aria-hidden="true">{navOpen ? "✕" : "☰"}</span>
+          </button>
+        </div>
+        <div className="landing-nav-drawer">
+          {landingLinks.map((link) => (
+            <a key={link.href} href={link.href} onClick={closeNav}>{link.label}</a>
+          ))}
+          <button type="button" className="btn-ghost" onClick={() => { closeNav(); navigate("/login"); }}>Login</button>
+          <button type="button" className="primary" onClick={() => { closeNav(); void startFreeTrial(); }}>Get Started Free</button>
         </div>
       </nav>
 

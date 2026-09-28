@@ -123,3 +123,39 @@ export async function opsRequest<T>(
     },
   });
 }
+
+export async function opsRequestPdf(
+  session: Session,
+  organizationId: string,
+  path: string,
+): Promise<{ base64: string; filename: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${runtimeApiUrl}${path}`, {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "x-organization-id": organizationId,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Unable to download file (${response.status})`);
+    }
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const matched = /filename="?([^"]+)"?/i.exec(disposition);
+    return {
+      base64: globalThis.btoa(binary),
+      filename: matched?.[1] || "sportzarena-invoice.pdf",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
