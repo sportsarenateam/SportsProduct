@@ -1,6 +1,6 @@
 # SportzArena mobile
 
-Expo SDK **57** app (`apps/mobile`) for Owner + Staff. Same Supabase Auth + live API as web. Payments use **Cashfree** (not Razorpay).
+Expo SDK **57** app (`apps/mobile`) for Owner + Staff. Same Supabase Auth + live API as web. Payments use **Cashfree**.
 
 ## Attractiveness stack (2026)
 
@@ -23,14 +23,14 @@ Expo SDK **57** app (`apps/mobile`) for Owner + Staff. Same Supabase Auth + live
 | **Sales Report** (all staff + owner bills) | Yes | Hidden |
 | Profile edit | Yes | Read-only |
 | **Staff invite / remove** | Yes (Profile → Staff) | — |
-| **Razorpay subscribe / renew / upgrade** | Yes | Ask owner |
+| **Cashfree subscribe / renew / upgrade** | Yes | Ask owner |
 | Add / manage sports | Yes | — |
 
 Staff bills saved on mobile appear in the **Owner Sales Report** (web and mobile) because both use the same `/ops` APIs and arena.
 
 ## Store release note
 
-Expo Go is for development. Play Store / App Store need an **EAS production build** (`eas build`). Razorpay checkout on mobile uses an in-app WebView against the same `/subscriptions/checkout` + `/subscriptions/verify` APIs as web.
+Expo Go is for development. Play Store / App Store need an **EAS production build** (`eas build`). Cashfree checkout on mobile uses an in-app WebView against the same `/subscriptions/checkout` + `/subscriptions/verify` APIs as web.
 
 ## Fix “Cannot reach API / timed out after 12s”
 

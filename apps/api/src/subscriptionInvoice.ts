@@ -31,21 +31,25 @@ export type InvoiceIssuerConfig = {
 };
 
 const logoCandidates = [
-  fileURLToPath(new URL("../../web/src/assets/sportzarena-logo-full.png", import.meta.url)),
-  fileURLToPath(new URL("../../mobile/assets/sportzarena-logo-full.png", import.meta.url)),
+  fileURLToPath(new URL("../../web/src/assets/sportzarena-logo.png", import.meta.url)),
+  fileURLToPath(new URL("../../mobile/assets/sportzarena-logo.png", import.meta.url)),
 ];
 
 function inr(amount: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
 }
 
-function formatWhen(iso: string) {
-  return new Date(iso).toLocaleString("en-IN", {
+function formatShortDate(iso: string, includeYear = true) {
+  return new Date(iso).toLocaleDateString("en-IN", {
     timeZone: "Asia/Kolkata",
     day: "2-digit",
     month: "short",
-    year: "numeric",
+    ...(includeYear ? { year: "numeric" } : {}),
   });
+}
+
+function formatWhen(iso: string) {
+  return formatShortDate(iso);
 }
 
 async function allocateInvoiceNumber(db: SupabaseClient) {
@@ -64,61 +68,107 @@ export function buildSubscriptionInvoicePdf(row: SubscriptionInvoiceRow, config:
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    const pageWidth = doc.page.width;
+    const margin = 48;
+    const contentWidth = pageWidth - margin * 2;
     const logo = logoCandidates.find((path) => existsSync(path));
     if (logo) {
       try {
-        doc.image(logo, 48, 40, { width: 120 });
+        doc.image(logo, margin, 40, { fit: [72, 72], align: "center", valign: "center" });
       } catch {
-        /* continue without logo */
+        // A missing or unsupported logo must not prevent invoice download.
       }
     }
-    doc.fontSize(11).fillColor("#0f172a").text(config.legalName, 200, 44, { align: "right" });
+    const issuerX = margin + 92;
+    const issuerWidth = contentWidth - 92;
+    doc.fontSize(11).fillColor("#0f172a")
+      .text(config.legalName, issuerX, 42, { width: issuerWidth, align: "right" });
     doc.fontSize(9).fillColor("#475569")
-      .text("https://sportsarena.team", { align: "right" })
-      .text(config.supportEmail, { align: "right" })
-      .text(config.supportPhone, { align: "right" });
-    if (config.gstin) doc.text(`GSTIN ${config.gstin}`, { align: "right" });
+      .text("https://sportsarena.team", issuerX, 60, { width: issuerWidth, align: "right" })
+      .text(config.supportEmail, issuerX, 74, { width: issuerWidth, align: "right" })
+      .text(config.supportPhone, issuerX, 88, { width: issuerWidth, align: "right" });
+    if (config.gstin) {
+      doc.text(`GSTIN ${config.gstin}`, issuerX, 102, { width: issuerWidth, align: "right" });
+    }
 
-    doc.moveDown(2);
-    doc.fillColor("#0f172a").fontSize(20).text("Subscription invoice", 48);
-    doc.moveDown(0.4);
-    doc.fontSize(10).fillColor("#475569").text(`Invoice ${row.invoice_number}`);
-    doc.text(`Date ${formatWhen(row.created_at)}`);
-    doc.text(`Payment ${row.payment_provider} · Order ${row.cashfree_order_id}`);
+    doc.fillColor("#0f172a").fontSize(20).text("Subscription invoice", margin, 132, { width: contentWidth });
+    doc.fontSize(10).fillColor("#475569")
+      .text(`Invoice ${row.invoice_number}`, margin, 162, { width: contentWidth })
+      .text(`Date ${formatWhen(row.created_at)}`, margin, 177, { width: contentWidth })
+      .text(`Payment ${row.payment_provider} · Order ${row.cashfree_order_id}`, margin, 192, { width: contentWidth });
 
-    doc.moveDown(1.2);
-    doc.fillColor("#0f172a").fontSize(11).text("Bill to");
-    doc.fontSize(10).fillColor("#334155")
-      .text(row.arena_name)
-      .text(row.customer_name || row.customer_email)
-      .text(row.customer_email);
-    if (row.arena_address) doc.text(row.arena_address);
+    const billToTop = 232;
+    doc.fillColor("#0f172a").fontSize(11).text("Bill to", margin, billToTop, { width: contentWidth });
+    doc.fontSize(10).fillColor("#334155").text(row.arena_name, margin, billToTop + 18, { width: contentWidth });
 
-    doc.moveDown(1.4);
-    const tableTop = doc.y;
-    doc.rect(48, tableTop, 499, 28).fill("#0f766e");
+    const customerName = row.customer_name.trim();
+    const customerEmail = row.customer_email.trim();
+    if (customerName && customerName.toLowerCase() !== customerEmail.toLowerCase()) {
+      doc.text(customerName, margin, billToTop + 33, { width: contentWidth });
+    }
+    const emailY = billToTop + (customerName && customerName.toLowerCase() !== customerEmail.toLowerCase() ? 48 : 33);
+    doc.text(customerEmail, margin, emailY, { width: contentWidth });
+    if (row.arena_address) {
+      doc.text(row.arena_address, margin, emailY + 15, { width: contentWidth });
+    }
+
+    const addressHeight = row.arena_address
+      ? doc.heightOfString(row.arena_address, { width: contentWidth })
+      : 0;
+    const tableTop = Math.max(330, emailY + 24 + addressHeight);
+    const tableX = margin;
+    const tableWidth = contentWidth;
+    const descX = tableX + 8;
+    const descWidth = 240;
+    const periodX = descX + descWidth + 12;
+    const periodWidth = 150;
+    const amountX = periodX + periodWidth + 8;
+    const amountWidth = tableX + tableWidth - 8 - amountX;
+    const headerHeight = 28;
+
+    doc.rect(tableX, tableTop, tableWidth, headerHeight).fill("#0f766e");
     doc.fillColor("#ffffff").fontSize(10)
-      .text("Description", 56, tableTop + 8, { width: 280 })
-      .text("Period", 340, tableTop + 8, { width: 120 })
-      .text("Amount", 460, tableTop + 8, { width: 78, align: "right" });
+      .text("Description", descX, tableTop + 8, { width: descWidth })
+      .text("Period", periodX, tableTop + 8, { width: periodWidth })
+      .text("Amount", amountX, tableTop + 8, { width: amountWidth, align: "right" });
 
-    const rowTop = tableTop + 28;
-    doc.rect(48, rowTop, 499, 44).fill("#f8fafc");
+    const startYear = new Date(row.period_starts_at).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+    });
+    const endYear = new Date(row.period_ends_at).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+    });
+    const sameYear = startYear === endYear;
+    const period = `${formatShortDate(row.period_starts_at, !sameYear)} – ${formatShortDate(row.period_ends_at)}`;
+    const description = `${row.plan_name} plan — SportzArena operations software`;
+    doc.font("Helvetica").fontSize(10);
+    const rowTextOptions = { lineGap: 2 };
+    const bodyHeight = Math.max(
+      doc.heightOfString(description, { ...rowTextOptions, width: descWidth }),
+      doc.heightOfString(period, { ...rowTextOptions, width: periodWidth }),
+      doc.heightOfString(inr(Number(row.amount)), { ...rowTextOptions, width: amountWidth }),
+    );
+    const rowHeight = Math.max(44, bodyHeight + 16);
+    const rowTop = tableTop + headerHeight;
+    doc.rect(tableX, rowTop, tableWidth, rowHeight).fill("#f8fafc");
     doc.fillColor("#0f172a").fontSize(10)
-      .text(`${row.plan_name} plan — SportzArena operations software`, 56, rowTop + 8, { width: 280 })
-      .text(`${formatWhen(row.period_starts_at)} – ${formatWhen(row.period_ends_at)}`, 340, rowTop + 8, { width: 120 })
-      .text(inr(Number(row.amount)), 460, rowTop + 8, { width: 78, align: "right" });
+      .text(description, descX, rowTop + 8, { width: descWidth, lineGap: 2 })
+      .text(period, periodX, rowTop + 8, { width: periodWidth, lineGap: 2 })
+      .text(inr(Number(row.amount)), amountX, rowTop + 8, { width: amountWidth, align: "right" });
 
+    const totalY = rowTop + rowHeight + 22;
     doc.fillColor("#0f172a").fontSize(14)
-      .text(`Total paid  ${inr(Number(row.amount))}`, 48, rowTop + 64, { align: "right" });
+      .text(`Total paid  ${inr(Number(row.amount))}`, margin, totalY, { width: contentWidth, align: "right" });
 
-    doc.moveDown(4);
+    const noteY = totalY + 44;
     doc.fontSize(9).fillColor("#64748b")
-      .text("This invoice is issued by SportzArena for the SaaS subscription. Cashfree collects the payment as our payment gateway and does not issue this invoice.", 48, doc.y, { width: 499 })
+      .text("This invoice is issued by SportzArena for the SaaS subscription. Cashfree collects the payment as our payment gateway and does not issue this invoice.", margin, noteY, { width: contentWidth })
       .moveDown(0.6)
       .text(config.gstin
         ? "This is a tax invoice for the subscription period shown above."
-        : "This is a payment receipt for the subscription period shown above. A GST tax invoice will be issued once GSTIN is registered on the SportzArena account.");
+        : "This is a payment receipt for the subscription period shown above. A GST tax invoice will be issued once GSTIN is registered on the SportzArena account.", { width: contentWidth });
 
     doc.end();
   });

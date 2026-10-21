@@ -168,17 +168,22 @@ export function WorkspaceNavigator({
               <Ionicons name="chevron-forward" size={18} color={themeColors.faint} />
             </Pressable>
           ))}
-        <View style={{ marginTop: 16, alignItems: "flex-start" }}>
+        <View style={{ marginTop: 20 }}>
           <Pressable
             onPress={onLogout}
             accessibilityRole="button"
             accessibilityLabel="Log out"
+            accessibilityHint="Signs out of your SportzArena account"
+            hitSlop={6}
             style={[
               styles.logoutIconBtn,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
+              {
+                backgroundColor: mode === "dark" ? "#3a1d2b" : "#fff1f2",
+                borderColor: mode === "dark" ? "#71334b" : "#fecdd3",
+              },
             ]}
           >
-            <Ionicons name="log-out-outline" size={22} color={themeColors.danger} />
+            <Ionicons name="power-outline" size={20} color={themeColors.danger} />
           </Pressable>
         </View>
       </Screen>
@@ -402,9 +407,9 @@ const styles = StyleSheet.create({
   },
   moreLabel: { fontWeight: "700", fontSize: 15 },
   logoutIconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",

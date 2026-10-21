@@ -7,6 +7,7 @@ import {
   readCachedArena,
   readCachedSports,
   supabase,
+  missingSupabaseConfig,
 } from "./lib/supabase";
 import sportzArenaLogo from "./assets/sportzarena-logo.png";
 import sportzArenaBackground from "./assets/sportzarena-background.png";
@@ -436,7 +437,14 @@ export function App() {
       <main className="auth-page">
         <section className="auth-card">
           <h1>Configuration needed</h1>
-          <p>Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the root `.env`, then restart the web server.</p>
+          <p>The login page needs real Supabase project settings. Missing or placeholder values: <strong>{missingSupabaseConfig.join(", ")}</strong>.</p>
+          <ol>
+            <li>Open the root `.env` file. If you do not have one, run <code>Copy-Item .env.example .env</code> in PowerShell from the repository folder.</li>
+            <li>In Supabase Dashboard, copy your project URL and publishable key (or legacy anon key) into <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>.</li>
+            <li>Save the file and restart the web server with <code>npm run dev:web</code>.</li>
+          </ol>
+          <p>Only use the publishable/anon key in the browser. Never put the service-role key or payment secrets in a <code>VITE_</code> variable, and do not share your credentials in chat.</p>
+          <p>For sign-in to complete, also start the API with <code>npm run dev:api</code> after configuring the server-only values in `.env`.</p>
         </section>
       </main>
     );
@@ -738,7 +746,7 @@ function HeroDashboardPreview({ highlightToken = 0 }: { highlightToken?: number 
 
       <div className="lp-device-phone lp-device-phone-live">
         <div className="lp-phone-notch" />
-        <p>Good Morning</p>
+        <p>Welcome back</p>
         <div className="lp-phone-kpis">
           <span>₹{Math.round(revenue / 1000)}k</span>
           <span>{bookings}</span>

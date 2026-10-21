@@ -1,4 +1,4 @@
-import { ImageBackground, StyleSheet, Text, View } from "react-native";
+import { Image, ImageBackground, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,9 +23,20 @@ export function LandingScreen({
           style={StyleSheet.absoluteFill}
         />
         <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+          <View style={styles.brand}>
+            <Image
+              source={require("../assets/sportzarena-logo-full.png")}
+              style={styles.brandLogo}
+              resizeMode="contain"
+              accessibilityLabel="SportzArena"
+            />
+            <Text style={styles.brandTagline}>BILL  ·  MANAGE  ·  GROW</Text>
+          </View>
+
           <View style={styles.spacer} />
 
           <View style={styles.copy}>
+            <Text style={styles.eyebrow}>SPORTS VENUE MANAGEMENT</Text>
             <Text style={styles.headline}>
               Your Sports Venue,{"\n"}
               <Text style={styles.headlineAccent}>Our Smart Solution</Text>
@@ -56,13 +67,28 @@ const styles = StyleSheet.create({
   bgImage: { resizeMode: "cover" },
   safe: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 20,
+    paddingHorizontal: 22,
+    paddingTop: 8,
+    paddingBottom: 24,
     justifyContent: "space-between",
   },
+  brand: { alignItems: "flex-start", gap: 5 },
+  brandLogo: { width: 156, height: 48 },
+  brandTagline: {
+    color: "#D6E6F5",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 2,
+    marginLeft: 3,
+  },
   spacer: { flex: 1 },
-  copy: { gap: 14 },
+  copy: { gap: 14, paddingBottom: 28 },
+  eyebrow: {
+    color: "#8FF0CB",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.6,
+  },
   headline: {
     color: "#fff",
     fontSize: 32,

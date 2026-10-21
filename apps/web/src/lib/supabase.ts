@@ -3,8 +3,27 @@ import { createClient } from "@supabase/supabase-js";
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+function isConfiguredValue(value: string | undefined): value is string {
+  return Boolean(value?.trim() && !/(?:your-project|your-publishable|your-anon|placeholder|server-only|change[-_ ]?me|\bxxx\b)/i.test(value));
+}
+
+function isValidSupabaseUrl(value: string | undefined): value is string {
+  if (!isConfiguredValue(value)) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+export const missingSupabaseConfig = [
+  ...(!isValidSupabaseUrl(url) ? ["VITE_SUPABASE_URL"] : []),
+  ...(!isConfiguredValue(key) ? ["VITE_SUPABASE_PUBLISHABLE_KEY"] : []),
+];
+
 // Persist session in localStorage so refresh / mobile browser reopen keeps the user signed in.
-export const supabase = url && key
+export const supabase = isValidSupabaseUrl(url) && isConfiguredValue(key)
   ? createClient(url, key, {
       auth: {
         persistSession: true,

@@ -42,4 +42,15 @@ Then walk modules **one by one** in the browser (recommended for today).
 
 ## Deferred / payments
 - [ ] Cashfree sandbox: Pay ₹499 on Subscribe → `arena_subscriptions.status` becomes `active`, period +30 days
+- [ ] A canceled checkout remains only in `subscription_payment_attempts` with its customer email and Cashfree status; it does not change `arena_subscriptions`
+- [ ] A successful checkout stores the owner email in `arena_subscriptions.billing_email` and issues an invoice with the same email
 - [ ] Cashfree webhook on Render after deploy: `/webhooks/cashfree`
+
+To inspect recent attempts in Supabase SQL Editor:
+
+```sql
+select created_at, cashfree_order_id, customer_email, plan_id, amount, currency, order_status
+from public.subscription_payment_attempts
+order by created_at desc
+limit 50;
+```

@@ -1,4 +1,4 @@
-# Auth (OTP-first) + Razorpay payments
+# Auth (OTP-first) + Cashfree payments
 
 ## Production login design (correct)
 
@@ -46,10 +46,12 @@ Remove or ignore `{{ .ConfirmationURL }}` if you only want OTP. The app flow is:
 ## Payment flow
 
 ```
-Trial → Upgrade / trial ended → Razorpay ₹499 → arena_subscriptions.status = active
+Trial → Upgrade / trial ended → Cashfree ₹499 → arena_subscriptions.status = active
 ```
 
-Live keys: `rzp_live_...` in `.env` when going to production. See [PRODUCTION_SECURITY.md](./PRODUCTION_SECURITY.md).
+For payment history, check `subscription_payment_attempts` (Cashfree order, status, and customer email). `arena_subscriptions.billing_email` stores the billing email for the active subscription. Apply the subscription payment attempts migration before using the updated API.
+
+Configure Cashfree sandbox credentials locally and production credentials in the production API environment. See [PRODUCTION_SECURITY.md](./PRODUCTION_SECURITY.md).
 
 ---
 

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   ImageBackground,
+  Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -172,14 +174,28 @@ export function LoginScreen({
           style={StyleSheet.absoluteFill}
         />
         <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
-          {onBack ? (
-            <Pressable onPress={onBack} style={styles.backRow} hitSlop={8}>
-              <Ionicons name="chevron-back" size={20} color="#fff" />
-              <Text style={styles.backText}>Back</Text>
-            </Pressable>
-          ) : null}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {onBack ? (
+              <Pressable onPress={onBack} style={styles.backRow} hitSlop={8}>
+                <Ionicons name="chevron-back" size={20} color="#fff" />
+                <Text style={styles.backText}>Back</Text>
+              </Pressable>
+            ) : null}
 
-          <View style={styles.card}>
+            <View style={styles.card}>
+            <View style={styles.brand}>
+              <Image
+                source={require("../assets/sportzarena-logo-full.png")}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityLabel="SportzArena"
+              />
+              <Text style={styles.brandTagline}>YOUR ARENA WORKSPACE</Text>
+            </View>
             <Title>Welcome back! 👋</Title>
             <Muted>
               {tab === "otp"
@@ -299,7 +315,8 @@ export function LoginScreen({
                 onPress={() => { setTab("otp"); setError(""); setMessage(""); setCodeSent(false); }}
               />
             </View>
-          </View>
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </ImageBackground>
     </View>
@@ -315,15 +332,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 16,
-    justifyContent: "center",
   },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: 12 },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: 12, minHeight: 40 },
   backText: { fontSize: 14, fontWeight: "700", color: "#fff" },
   card: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     borderRadius: 20,
-    padding: 18,
+    padding: 22,
     gap: 12,
     backgroundColor: "rgba(255,255,255,0.95)",
+  },
+  brand: { alignItems: "center", gap: 2, marginBottom: 2 },
+  brandLogo: { width: 156, height: 48 },
+  brandTagline: {
+    color: "#5B7A90",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.4,
   },
   tabs: { flexDirection: "row", gap: 8, justifyContent: "center" },
   form: { gap: 10 },

@@ -51,13 +51,6 @@ function greetingName(email: string, role: AppRole) {
   return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
-function timeGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
-  return "Good Evening";
-}
-
 export function HomeScreen({
   session,
   email,
@@ -168,7 +161,7 @@ export function HomeScreen({
       <View style={[styles.heroBanner, { backgroundColor: themeColors.navyDeep }]}>
         <View style={styles.heroCopy}>
           <Text style={styles.heroTitle}>
-            {timeGreeting()}, {greetingName(email, role)} 👋
+            Welcome back, {greetingName(email, role)} 👋
           </Text>
           <Text style={styles.heroLead}>Here&apos;s what&apos;s happening with your arena today.</Text>
         </View>

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import sportzArenaLogo from "../assets/sportzarena-logo.png";
 import sportzArenaBackground from "../assets/sportzarena-background.png";
@@ -123,8 +123,11 @@ async function downloadSubscriptionInvoicePdf(session: Session, organizationId: 
   const a = document.createElement("a");
   a.href = url;
   a.download = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function loadCashfree(): Promise<void> {
@@ -177,13 +180,6 @@ function Icon({ name }: { name: string }) {
       <path fill="currentColor" d={path} />
     </svg>
   );
-}
-
-function timeGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
-  return "Good Evening";
 }
 
 function DeleteButton({
@@ -426,7 +422,7 @@ export function WorkspaceApp({
   return (
     <main className="app-shell workspace-shell dash-shell">
       <aside className="dash-sidebar">
-        <button type="button" className="dash-side-brand" onClick={() => setPage("home")}>
+        <button type="button" className="dash-side-brand" aria-label={`${arena.name} home`} onClick={() => setPage("home")}>
           <img src={sportzArenaLogo} alt="" />
           <span>
             <strong>Sportz<span>Arena</span></strong>
@@ -437,6 +433,7 @@ export function WorkspaceApp({
           <button
             type="button"
             className={`dash-side-link${page === "home" ? " is-active" : ""}`}
+            title="Dashboard"
             onClick={() => setPage("home")}
           >
             <span className="dash-side-ico tone-home"><Icon name="home" /></span>
@@ -498,7 +495,17 @@ export function WorkspaceApp({
                 <small>{isOwner ? "Arena Owner" : "Arena Staff"}</small>
               </span>
             </div>
-            <button className="link" type="button" onClick={onLogout}>Log out</button>
+            <button
+              className="dash-logout-btn"
+              type="button"
+              onClick={onLogout}
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2v10m5.66-6.66a8 8 0 1 1-11.32 0" />
+              </svg>
+            </button>
           </div>
         </header>
 
@@ -533,7 +540,7 @@ export function WorkspaceApp({
               <div className="dash-home-primary">
                 <header className="dash-greeting" style={{ backgroundImage: `url(${sportzArenaBackground})` }}>
                   <div className="dash-greeting-copy">
-                    <h1>{timeGreeting()}, {isOwner ? "Admin" : "Staff"} 👋</h1>
+                    <h1>Welcome back, {isOwner ? "Admin" : "Staff"} 👋</h1>
                     <p>
                       {isOwner
                         ? "Here’s what’s happening across bookings, members, and sales today."
@@ -2938,6 +2945,7 @@ function SubscriptionInvoicesCard({ session, arenaId }: { session: Session; aren
   const [invoices, setInvoices] = useState<SubscriptionInvoiceListItem[]>([]);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const downloadInProgress = useRef(false);
 
   useEffect(() => {
     opsRequest<{ invoices: SubscriptionInvoiceListItem[] }>(session, arenaId, "/subscriptions/invoices")
@@ -2965,8 +2973,10 @@ function SubscriptionInvoicesCard({ session, arenaId }: { session: Session; aren
             <button
               type="button"
               className="link"
-              disabled={busyId === row.id}
+              disabled={Boolean(busyId)}
               onClick={async () => {
+                if (downloadInProgress.current) return;
+                downloadInProgress.current = true;
                 setBusyId(row.id);
                 setError("");
                 try {
@@ -2974,6 +2984,7 @@ function SubscriptionInvoicesCard({ session, arenaId }: { session: Session; aren
                 } catch (err) {
                   setError(err instanceof Error ? err.message : "Unable to download invoice");
                 } finally {
+                  downloadInProgress.current = false;
                   setBusyId("");
                 }
               }}

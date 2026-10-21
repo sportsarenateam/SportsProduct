@@ -54,3 +54,5 @@ $$;
 
 revoke all on function public.next_subscription_invoice_number() from public, anon, authenticated;
 grant execute on function public.next_subscription_invoice_number() to service_role;
+
+notify pgrst, 'reload schema';
