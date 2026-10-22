@@ -147,16 +147,16 @@ export function SubscriptionScreen({
   if (checkoutHtml) {
     return (
       <View style={{ flex: 1, backgroundColor: themeColors.bg }}>
+        <BackHeader
+          title="Secure payment"
+          onBack={() => {
+            setCheckoutHtml(null);
+            setBusy(false);
+          }}
+        />
         <View style={{ padding: 16, paddingBottom: 8, gap: 8 }}>
           <Muted>Complete the Cashfree sandbox payment (test mode — no real money).</Muted>
           <Muted>When you finish or close the sheet, we confirm with the server.</Muted>
-          <PrimaryButton
-            label="Close checkout"
-            onPress={() => {
-              setCheckoutHtml(null);
-              setBusy(false);
-            }}
-          />
         </View>
         <WebView
           originWhitelist={["*"]}

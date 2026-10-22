@@ -1,5 +1,5 @@
 import { useEffect, useState, Component, type ReactNode } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import type { Session, User } from "@supabase/supabase-js";
 import { apiRequest, clearApiUrlOverride, getApiUrl, loadApiUrlOverride, opsRequest, setApiUrlOverride } from "./lib/api";
@@ -161,6 +161,23 @@ function AppBody() {
   }, []);
 
   useEffect(() => {
+    if (supabaseConfigError) return;
+    const updateAuthRefresh = (state: string) => {
+      if (state === "active") {
+        supabase.auth.startAutoRefresh();
+      } else {
+        supabase.auth.stopAutoRefresh();
+      }
+    };
+    updateAuthRefresh(AppState.currentState);
+    const subscription = AppState.addEventListener("change", updateAuthRefresh);
+    return () => {
+      subscription.remove();
+      supabase.auth.stopAutoRefresh();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(""), 2500);
     return () => clearTimeout(timer);
@@ -182,6 +199,7 @@ function AppBody() {
     setBootstrapping(true);
     setBootstrapDone(false);
     setOpsError("");
+    let cancelled = false;
 
     apiRequest<{
       memberships: Array<{
@@ -205,6 +223,7 @@ function AppBody() {
       subscription?: { status: string; trial_ends_at: string | null; current_period_ends_at?: string | null } | null;
     }>(session, "/me/bootstrap")
       .then(async ({ memberships, role: roleFromApi, subscription }) => {
+        if (cancelled) return;
         const rawOrg = memberships[0]?.organizations;
         const organization = Array.isArray(rawOrg) ? rawOrg[0] : rawOrg;
         const nextRole = (roleFromApi ?? memberships[0]?.role ?? null) as AppRole | null;
@@ -239,6 +258,7 @@ function AppBody() {
           nextArena.id,
           "/ops/bootstrap",
         );
+        if (cancelled) return;
         setSports(ops.sports);
         setInventory(ops.inventory);
         if (nextRole === "owner" && ops.sports.length === 0) {
@@ -246,13 +266,18 @@ function AppBody() {
         }
       })
       .catch((err) => {
+        if (cancelled) return;
         setOpsError(err instanceof Error ? err.message : "Unable to load account");
         setArena(null);
       })
       .finally(() => {
+        if (cancelled) return;
         setBootstrapping(false);
         setBootstrapDone(true);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [session, authReady, apiReady, bootKey]);
 
   async function refreshOps() {
